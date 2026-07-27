@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "udwm"
+version = "0.1.0"
+description = "Shared core for uncertainty-aware diffusion world models (UBE + MBRL)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "torch>=2.0",
+  "gymnasium>=0.29",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+udwm-smoke = "udwm.scripts.smoke_test:main"
+udwm-train = "udwm.scripts.train_mbpo:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["udwm*"]

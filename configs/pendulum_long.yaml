@@ -1,0 +1,58 @@
+# Longer Pendulum run for Gap 3 continuous-control experiments
+seed: 0
+device: cpu
+
+env:
+  id: Pendulum-v1
+  max_episode_steps: 200
+
+model:
+  type: diffusion
+  ensemble_size: 5
+  hidden_dims: [200, 200]
+  diffusion_steps: 10
+  beta_start: 1.0e-4
+  beta_end: 2.0e-2
+  sample_steps: 4
+
+reward_term:
+  joint_with_diffusion: false   # set true for Gap 1 joint reward path
+  hidden_dims: [128, 128]
+
+ube:
+  m_samples: 6
+  u_min: 0.0
+  hidden_dims: [256, 256]
+
+agent:
+  gamma: 0.99
+  tau: 0.005
+  actor_lr: 3.0e-4
+  critic_lr: 3.0e-4
+  alpha_lr: 3.0e-4
+  auto_alpha: true
+  target_entropy: null
+  hidden_dims: [256, 256]
+  batch_size: 256
+  optimism_lambda: 0.5   # mild exploration via √U
+  use_ube: true
+
+mbpo:
+  real_ratio: 0.05
+  rollout_length: 1
+  rollouts_per_step: 400
+  model_train_freq: 250
+  model_retain_epochs: 1
+  num_model_epochs: 40
+  model_batch_size: 256
+  agent_updates_per_step: 20
+  warmup_steps: 2000
+  total_env_steps: 25000
+  eval_freq: 2000
+  log_freq: 200
+  buffer_size: 100000
+  model_buffer_size: 200000
+
+paths:
+  log_dir: runs
+  checkpoint_dir: checkpoints

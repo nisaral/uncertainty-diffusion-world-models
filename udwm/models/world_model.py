@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+from typing import Dict, Optional
+
+import torch
+import torch.nn as nn
+
+from udwm.models.diffusion_dynamics import DiffusionDynamicsEnsemble
+from udwm.models.gaussian_ensemble import GaussianEnsemble
+from udwm.models.reward_term import RewardTerminationModel
+
+
+class WorldModel(nn.Module):
+    """Unified interface over Gaussian or diffusion dynamics + reward/term.
+
+    Modes
+    -----
+    - gaussian: PETS-style ensemble (state+reward in one NLL)
+    - diffusion + separate R/T: DIAMOND-style (Gap 1 baseline)
+    - diffusion + joint_reward: reward denoised with Δs (Gap 1 contribution)
+    """
+
+    def __init__(
+        self,
+        dynamics: nn.Module,
+        reward_model: Optional[RewardTerminationModel] = None,
+        model_type: str = "diffusion",
+        joint_reward: bool = False,
+    ) -> None:
+        super().__init__()
+        self.dynamics = dynamics
+        self.reward_model = reward_model
+        self.model_type = model_type
+        self.joint_reward = joint_reward
+
+    @property
+    def ensemble_size(self) -> int:
+        return int(getattr(self.dynamics, "ensemble_size", 1))
+
+    def train_loss(
+        self,
+        obs: torch.Tensor,
+        actions: torch.Tensor,
+        next_obs: torch.Tensor,
+        rewards: torch.Tensor,
+        dones: torch.Tensor,
+    ) -> Dict[str, torch.Tensor]:
+        if self.model_type == "gaussian":
+            dyn_loss = self.dynamics.nll_loss(obs, actions, next_obs, rewards)
+            r_loss = torch.tensor(0.0, device=obs.device)
+            total = dyn_loss
+        elif self.joint_reward:
+            # reward inside diffusion loss; term head inside dynamics.nll_loss
+            dyn_loss = self.dynamics.nll_loss(obs, actions, next_obs, rewards, dones)
+            r_loss = torch.tensor(0.0, device=obs.device)
+            total = dyn_loss
+        else:
+            dyn_loss = self.dynamics.nll_loss(obs, actions, next_obs, rewards, dones)
+            if self.reward_model is not None:
+                r_loss = self.reward_model.loss(obs, actions, rewards, dones)
+            else:
+                r_loss = torch.tensor(0.0, device=obs.device)
+            total = dyn_loss + r_loss
+        return {"total": total, "dynamics": dyn_loss.detach(), "reward": r_loss.detach()}
+
+    @torch.no_grad()
+    def rollout(
+        self,
+        obs: torch.Tensor,
+        policy_action_fn,
+        horizon: int,
+        member: Optional[int] = None,
+    ) -> Dict[str, torch.Tensor]:
+        obs_list, act_list, rew_list, next_list, done_list = [], [], [], [], []
+        o = obs
+        done = torch.zeros(o.shape[0], 1, device=o.device)
+        for _ in range(horizon):
+            a = policy_action_fn(o)
+            if self.model_type == "gaussian":
+                o2, r = self.dynamics.sample_next(o, a, member=member)
+                d = torch.zeros_like(r)
+            elif self.joint_reward:
+                o2, r = self.dynamics.sample_next_with_reward(o, a, member=member)
+                d = self.dynamics.predict_done(o, a)
+            else:
+                o2 = self.dynamics.sample_next(o, a, member=member)
+                if self.reward_model is not None:
+                    r, d = self.reward_model.predict(o, a)
+                else:
+                    r = torch.zeros(o.shape[0], 1, device=o.device)
+                    d = torch.zeros_like(r)
+            active = 1.0 - done
+            obs_list.append(o)
+            act_list.append(a)
+            rew_list.append(r * active)
+            next_list.append(o2)
+            done_list.append(torch.clamp(done + d * active, 0, 1))
+            o = o2
+            done = done_list[-1]
+        return {
+            "obs": torch.stack(obs_list, 1),
+            "actions": torch.stack(act_list, 1),
+            "rewards": torch.stack(rew_list, 1),
+            "next_obs": torch.stack(next_list, 1),
+            "dones": torch.stack(done_list, 1),
+        }
+
+    @staticmethod
+    def build(
+        model_type: str,
+        obs_dim: int,
+        action_dim: int,
+        ensemble_size: int,
+        hidden_dims,
+        diffusion_steps: int = 10,
+        beta_start: float = 1e-4,
+        beta_end: float = 2e-2,
+        sample_steps: int = 4,
+        reward_hidden=(128, 128),
+        joint_with_diffusion: bool = False,
+    ) -> "WorldModel":
+        if model_type == "gaussian":
+            dyn = GaussianEnsemble(obs_dim, action_dim, ensemble_size, hidden_dims)
+            return WorldModel(dyn, reward_model=None, model_type="gaussian", joint_reward=False)
+
+        dyn = DiffusionDynamicsEnsemble(
+            obs_dim,
+            action_dim,
+            ensemble_size,
+            hidden_dims,
+            diffusion_steps,
+            beta_start,
+            beta_end,
+            sample_steps,
+            joint_reward=joint_with_diffusion,
+        )
+        if joint_with_diffusion:
+            # Reward inside diffusion; no separate reward MLP
+            return WorldModel(dyn, reward_model=None, model_type="diffusion", joint_reward=True)
+
+        rmodel = RewardTerminationModel(obs_dim, action_dim, reward_hidden)
+        return WorldModel(dyn, reward_model=rmodel, model_type="diffusion", joint_reward=False)

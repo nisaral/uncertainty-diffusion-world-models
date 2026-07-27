@@ -1,0 +1,63 @@
+# Shared core defaults — continuous control (Gap 3 path), extensible to Gap 1/2
+
+seed: 0
+device: cpu  # set cuda if available
+
+env:
+  id: Pendulum-v1
+  max_episode_steps: 200
+
+model:
+  type: diffusion  # gaussian | diffusion
+  ensemble_size: 5
+  hidden_dims: [200, 200, 200]
+  # Diffusion-specific
+  diffusion_steps: 10
+  beta_start: 1.0e-4
+  beta_end: 2.0e-2
+  # Consistency / few-step sampling at inference
+  sample_steps: 4
+
+reward_term:
+  # Separate R/T head (DIAMOND-style). Joint diffusion = Gap 1 extension.
+  joint_with_diffusion: false
+  hidden_dims: [128, 128]
+
+ube:
+  m_samples: 8          # MC next-state samples per ensemble member
+  u_min: 0.0            # clip local uncertainty rewards
+  gamma_u: null         # if null, use agent gamma**2 for UBE targets
+  hidden_dims: [256, 256]
+
+agent:
+  gamma: 0.99
+  tau: 0.005
+  actor_lr: 3.0e-4
+  critic_lr: 3.0e-4
+  alpha_lr: 3.0e-4
+  auto_alpha: true
+  target_entropy: null  # null -> -action_dim
+  hidden_dims: [256, 256]
+  batch_size: 256
+  optimism_lambda: 0.0  # >0: Q + λ√U exploration; <0: pessimism
+  use_ube: true
+
+mbpo:
+  real_ratio: 0.05
+  rollout_length: 1
+  rollouts_per_step: 400
+  model_train_freq: 250
+  model_retain_epochs: 1
+  num_model_epochs: 50
+  model_batch_size: 256
+  agent_updates_per_step: 20
+  warmup_steps: 1000
+  total_env_steps: 10000
+  eval_freq: 1000
+  log_freq: 100
+  buffer_size: 100000
+  model_buffer_size: 200000
+
+paths:
+  log_dir: runs
+  checkpoint_dir: checkpoints
