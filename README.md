@@ -53,6 +53,13 @@ python -m udwm.scripts.evaluate --checkpoint checkpoints/mbpo_diffusion_sepR_see
 
 # Unit tests
 python -m pytest tests/test_core.py -q
+
+# Gap-3 ablations (Gaussian vs diffusion vs joint R vs no-UBE)
+python -m udwm.scripts.run_ablations --config configs/ablation_fast.yaml --steps 2000
+
+# Theory toy: exact UBE vs MC on a small DAG MRP
+python theory/toy_ube_mdp.py
+python theory/toy_mc_ube_estimator.py
 ```
 
 ### Useful flags

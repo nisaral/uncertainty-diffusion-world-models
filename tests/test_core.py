@@ -71,6 +71,24 @@ def test_mc_ube_shapes():
     assert out["w"].shape == (4, 1)
 
 
+def test_toy_ube_mdp_exact():
+    """UBE fixed point matches Var(V) on the enumerable DAG MRP."""
+    import importlib.util
+    import sys
+
+    path = ROOT / "theory" / "toy_ube_mdp.py"
+    spec = importlib.util.spec_from_file_location("toy_ube_mdp", path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules["toy_ube_mdp"] = mod
+    spec.loader.exec_module(mod)
+    mrp = mod.EnsembleMRP(ps=[0.2, 0.5, 0.8], r1=10.0, r2=0.0, gamma=0.9)
+    _, var_v, _ = mrp.posterior_mean_var()
+    w = mrp.closed_form_w()
+    ube_u = (mrp.gamma**2) * w
+    assert abs(ube_u - var_v) < 1e-9
+
+
 def test_joint_reward_diffusion():
     wm = WorldModel.build(
         "diffusion",
