@@ -1,0 +1,59 @@
+# Diffusion teacher + one-step consistency student (Gap 3 latency path)
+seed: 0
+device: cpu
+
+env:
+  id: Pendulum-v1
+  max_episode_steps: 200
+
+model:
+  type: diffusion
+  ensemble_size: 3
+  hidden_dims: [128, 128]
+  diffusion_steps: 8
+  beta_start: 1.0e-4
+  beta_end: 2.0e-2
+  sample_steps: 4
+  use_consistency_distill: true
+
+reward_term:
+  joint_with_diffusion: false
+  hidden_dims: [64, 64]
+
+ube:
+  m_samples: 4
+  u_min: 0.0
+  hidden_dims: [128, 128]
+
+agent:
+  gamma: 0.99
+  tau: 0.005
+  actor_lr: 3.0e-4
+  critic_lr: 3.0e-4
+  alpha_lr: 3.0e-4
+  auto_alpha: true
+  target_entropy: null
+  hidden_dims: [128, 128]
+  batch_size: 128
+  optimism_lambda: 0.3
+  use_ube: true
+
+mbpo:
+  real_ratio: 0.05
+  rollout_length: 1
+  rollouts_per_step: 80
+  model_train_freq: 200
+  model_retain_epochs: 1
+  num_model_epochs: 15
+  model_batch_size: 128
+  agent_updates_per_step: 5
+  warmup_steps: 400
+  total_env_steps: 1500
+  eval_freq: 500
+  log_freq: 100
+  buffer_size: 50000
+  model_buffer_size: 50000
+
+paths:
+  log_dir: runs
+  checkpoint_dir: checkpoints

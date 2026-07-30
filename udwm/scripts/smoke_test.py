@@ -126,7 +126,30 @@ def main() -> None:
     print(f"  joint sample next/reward shapes: {tuple(o2.shape)} {tuple(r2.shape)}")
     print(f"  joint rollout rewards shape: {tuple(roll_j['rewards'].shape)}")
 
-    print("\nSMOKE OK — shared core + joint reward path runnable.")
+    print("== Consistency distill wrapper ==")
+    from udwm.models.consistency import ConsistencyStudent, DistilledWorldModel, distill_loss
+
+    teacher = WorldModel.build(
+        "diffusion",
+        obs_dim,
+        action_dim,
+        ensemble_size=2,
+        hidden_dims=(64, 64),
+        diffusion_steps=5,
+        sample_steps=2,
+        joint_with_diffusion=False,
+    ).dynamics
+    student = ConsistencyStudent(obs_dim, obs_dim, action_dim, ensemble_size=2, hidden_dims=(64, 64))
+    dloss = distill_loss(student, teacher, obs, act, next_obs, rew)
+    dloss.backward()
+    dwm = DistilledWorldModel(teacher, student)
+    with torch.no_grad():
+        roll_d = dwm.rollout(obs[:4], policy_fn, horizon=2)
+    print(f"  distill loss: {float(dloss.detach()):.4f}")
+    print(f"  distilled rollout shape: {tuple(roll_d['obs'].shape)}")
+
+    print("\nSMOKE OK — core + joint reward + consistency distill runnable.")
+
 
 
 if __name__ == "__main__":

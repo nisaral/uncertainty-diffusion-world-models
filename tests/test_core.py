@@ -111,3 +111,28 @@ def test_joint_reward_diffusion():
     o2, r2 = wm.dynamics.sample_next_with_reward(obs[:4], act[:4])
     assert o2.shape == (4, 3)
     assert r2.shape == (4, 1)
+
+
+def test_consistency_distill_build():
+    wm = WorldModel.build(
+        "diffusion",
+        3,
+        1,
+        ensemble_size=2,
+        hidden_dims=(32, 32),
+        diffusion_steps=4,
+        sample_steps=2,
+        use_consistency_distill=True,
+    )
+    from udwm.models.consistency import DistilledWorldModel
+
+    assert isinstance(wm, DistilledWorldModel)
+    obs = torch.randn(8, 3)
+    act = torch.randn(8, 1)
+    nxt = obs + 0.05 * torch.randn_like(obs)
+    rew = torch.randn(8, 1)
+    done = torch.zeros(8, 1)
+    loss = wm.train_loss(obs, act, nxt, rew, done)["total"]
+    loss.backward()
+    assert torch.isfinite(loss)
+

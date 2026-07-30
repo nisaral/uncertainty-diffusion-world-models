@@ -1,114 +1,78 @@
 # Uncertainty-Aware Diffusion World Models for RL
 
-Shared research stack for **continuous-control world models** with **multi-step epistemic uncertainty** (UBE) and paths to joint reward diffusion (DIAMOND open problem) and multi-agent PO (stretch).
+Open research stack: **diffusion / Gaussian world models** + **MC-UBE multi-step epistemic uncertainty** + MBPO/SAC, with paths to joint reward diffusion and consistency distillation.
 
-## Talk to a professor?
-
-Read **`docs/PROFESSOR_BRIEFING.md`** — simple pitch + technical depth + Q&A cheat sheet.
-
----
-
-## What this repo is
-
-| Layer | Contents |
+| Doc | When to read |
 |---|---|
-| **Code (`udwm/`)** | Gaussian or diffusion ensemble WM, joint/separate reward, SAC+MBPO, MC-UBE, eval metrics |
-| **Theory (`research/`)** | Sample-based UBE claim, assumptions log, proof checklists |
-| **Docs (`docs/`)** | Professor briefing, project narrative |
+| **`docs/CODE_AND_THEORY_GUIDE.md`** | **Start here** — code + theory in one place |
+| `docs/PROFESSOR_BRIEFING.md` | Simple + technical talk script |
+| `papers/LITERATURE_SURVEY.md` | Related work / citations |
+| `papers/PAPER_DRAFT.md` | Working research paper draft |
+| `research/SAMPLE-BASED-UBE-FOR-DIFFUSION.md` | Theory north-star (Claim A) |
 
-### Research map
-
-| Gap | Question | Code status |
-|---|---|---|
-| **Core** | One stack for all gaps | Done |
-| **Gap 3** | Continuous control + distilled diffusion + UBE | Trainer + eval + long config |
-| **Gap 1** | Joint reward in diffusion (DIAMOND limitation) | `joint_with_diffusion: true` implemented |
-| **Gap 2** | Multi-agent state-error → value U | Stub only |
+**GitHub:** https://github.com/nisaral/uncertainty-diffusion-world-models
 
 ---
 
-## Install & run
+## Quick start
 
 ```bash
-cd uncertainty-diffusion-world-models
 pip install -r requirements.txt
+# optional plots: pip install matplotlib
 
-# Component smoke test (Gaussian + diffusion + joint R + UBE)
 python -m udwm.scripts.smoke_test
-
-# Short train (Pendulum)
 python -m udwm.scripts.train_mbpo --config configs/smoke_train.yaml
-
-# Joint reward diffusion (Gap 1 path)
-python -m udwm.scripts.train_mbpo --config configs/joint_reward.yaml
-
-# Longer Gap 3-style run
-python -m udwm.scripts.train_mbpo --config configs/pendulum_long.yaml --steps 25000
-
-# Throughput: Gaussian vs diffusion sample steps (answers "is diffusion too slow?")
-python -m udwm.scripts.benchmark_throughput
-
-# Evaluate a checkpoint
-python -m udwm.scripts.evaluate --checkpoint checkpoints/mbpo_diffusion_sepR_seed0.pt --config configs/smoke_train.yaml
-
-# Unit tests
+python theory/toy_ube_mdp.py
 python -m pytest tests/test_core.py -q
+```
 
-# Gap-3 ablations (Gaussian vs diffusion vs joint R vs no-UBE)
+### Experiments
+
+```bash
+# Ablations (Gaussian / diffusion / joint-R / no-UBE)
 python -m udwm.scripts.run_ablations --config configs/ablation_fast.yaml --steps 2000
 
-# Theory toy: exact UBE vs MC on a small DAG MRP
-python theory/toy_ube_mdp.py
-python theory/toy_mc_ube_estimator.py
+# Consistency-distilled 1-step student
+python -m udwm.scripts.train_mbpo --config configs/consistency_distill.yaml
+
+# Joint reward in diffusion (Gap 1)
+python -m udwm.scripts.train_mbpo --config configs/joint_reward.yaml
+
+# Throughput + plots
+python -m udwm.scripts.benchmark_throughput
+python -m udwm.scripts.plot_results
 ```
 
-### Useful flags
+---
 
-```bash
---model gaussian|diffusion
---joint-reward          # Gap 1
---separate-reward
---no-ube
---steps N
---device cpu|cuda
-```
+## Research map
+
+| Gap | Question | Status |
+|---|---|---|
+| Core | Shared WM + UBE + SAC stack | Done |
+| Gap 3 | Continuous control + diffusion UQ + distill | Code + draft paper |
+| Gap 1 | Joint reward in diffusion | Implemented path |
+| Gap 2 | Multi-agent state→value uncertainty | Future |
 
 ---
 
 ## Package layout
 
 ```
-udwm/
-  models/          gaussian_ensemble, diffusion_dynamics (joint R), reward_term, world_model
-  uncertainty/     mc_ube (MC-UBE-Local + U-net), calibration
-  rl/              sac, trainer (MBPO + full eval metrics)
-  eval/            return, WM accuracy, U calibration, throughput
-  scripts/         smoke_test, train_mbpo, evaluate, benchmark_throughput
-configs/           default, smoke_train, pendulum_long, joint_reward
-docs/              PROFESSOR_BRIEFING.md
-research/          theory north-star
-theory/            pure-math toy MC-UBE
+udwm/models/       Gaussian, diffusion, joint-R, consistency distill
+udwm/uncertainty/  MC-UBE local rewards + U-network
+udwm/rl/           SAC + MBPO trainer
+udwm/eval/         return, MSE, calibration, throughput
+udwm/scripts/      train, ablate, plot, evaluate, smoke
+theory/            exact UBE MRP + MC estimator toys
+papers/            literature survey + paper draft + bib
+docs/              understanding guide + professor briefing
 ```
 
 ---
 
-## Method in one diagram
+## Citation lineage (short)
 
-```
-Env ──► real buffer ──► train ensemble WM (Gaussian | diffusion | joint-R diffusion)
-                              │
-                              ▼ few-step DDIM imagination
-                        model buffer ──► SAC  +  MC-UBE ──► U(s,a)
-                              │
-                              └─ policy: Q ± λ√U
-```
+MBPO · PETS · Luis exact UBE · DIAMOND · Consistency models · WIMLE · Wang et al. multi-agent diffusion PO  
 
----
-
-## References
-
-- Luis et al. 2023 — Exact UBE  
-- Alonso et al. 2024 — DIAMOND  
-- Janner et al. 2019 — MBPO  
-- WIMLE 2026 — uncertainty-aware continuous control (IMLE)  
-- Wang et al. 2025 — multi-agent diffusion PO bounds  
+See `papers/LITERATURE_SURVEY.md` and `papers/references.bib`.

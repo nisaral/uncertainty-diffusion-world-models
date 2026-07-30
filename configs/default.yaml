@@ -17,6 +17,8 @@ model:
   beta_end: 2.0e-2
   # Consistency / few-step sampling at inference
   sample_steps: 4
+  # If true: train one-step consistency student (WIMLE-latency answer)
+  use_consistency_distill: false
 
 reward_term:
   # Separate R/T head (DIAMOND-style). Joint diffusion = Gap 1 extension.

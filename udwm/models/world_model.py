@@ -5,6 +5,7 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 
+from udwm.models.consistency import ConsistencyStudent, DistilledWorldModel
 from udwm.models.diffusion_dynamics import DiffusionDynamicsEnsemble
 from udwm.models.gaussian_ensemble import GaussianEnsemble
 from udwm.models.reward_term import RewardTerminationModel
@@ -118,7 +119,8 @@ class WorldModel(nn.Module):
         sample_steps: int = 4,
         reward_hidden=(128, 128),
         joint_with_diffusion: bool = False,
-    ) -> "WorldModel":
+        use_consistency_distill: bool = False,
+    ):
         if model_type == "gaussian":
             dyn = GaussianEnsemble(obs_dim, action_dim, ensemble_size, hidden_dims)
             return WorldModel(dyn, reward_model=None, model_type="gaussian", joint_reward=False)
@@ -134,8 +136,14 @@ class WorldModel(nn.Module):
             sample_steps,
             joint_reward=joint_with_diffusion,
         )
+        if use_consistency_distill:
+            x_dim = obs_dim + (1 if joint_with_diffusion else 0)
+            student = ConsistencyStudent(
+                x_dim, obs_dim, action_dim, ensemble_size, hidden_dims
+            )
+            return DistilledWorldModel(dyn, student)
+
         if joint_with_diffusion:
-            # Reward inside diffusion; no separate reward MLP
             return WorldModel(dyn, reward_model=None, model_type="diffusion", joint_reward=True)
 
         rmodel = RewardTerminationModel(obs_dim, action_dim, reward_hidden)

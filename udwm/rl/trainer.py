@@ -28,16 +28,16 @@ class MBPOTrainer:
         self.device = get_device(cfg.get("device", "cpu"))
         self.seed = int(cfg.get("seed", 0))
 
+        from udwm.envs.registry import make_env, space_info
+
         env_id = cfg["env"]["id"]
-        self.env = gym.make(env_id)
-        self.eval_env = gym.make(env_id)
-        obs_space = self.env.observation_space
-        act_space = self.env.action_space
-        assert len(obs_space.shape) == 1, "Shared core expects vector observations"
-        self.obs_dim = int(obs_space.shape[0])
-        self.action_dim = int(act_space.shape[0])
-        self.action_low = act_space.low.astype(np.float32)
-        self.action_high = act_space.high.astype(np.float32)
+        self.env = make_env(env_id, seed=self.seed)
+        self.eval_env = make_env(env_id, seed=self.seed + 1)
+        info = space_info(self.env)
+        self.obs_dim = info["obs_dim"]
+        self.action_dim = info["action_dim"]
+        self.action_low = info["action_low"]
+        self.action_high = info["action_high"]
 
         mcfg = cfg["model"]
         rcfg = cfg["reward_term"]
@@ -53,6 +53,7 @@ class MBPOTrainer:
             sample_steps=int(mcfg.get("sample_steps", 4)),
             reward_hidden=tuple(rcfg.get("hidden_dims", [128, 128])),
             joint_with_diffusion=bool(rcfg.get("joint_with_diffusion", False)),
+            use_consistency_distill=bool(mcfg.get("use_consistency_distill", False)),
         ).to(self.device)
 
         self.wm_opt = torch.optim.Adam(self.world_model.parameters(), lr=1e-3)
