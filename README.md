@@ -4,9 +4,9 @@ Open research stack: **diffusion / Gaussian world models** + **MC-UBE multi-step
 
 | Doc | When to read |
 |---|---|
-| **`docs/CODE_AND_THEORY_GUIDE.md`** | **Start here** — code + theory in one place |
-| `docs/PROFESSOR_BRIEFING.md` | Simple + technical talk script |
-| `papers/LITERATURE_SURVEY.md` | Related work / citations |
+| **`docs/CODE_AND_THEORY_GUIDE.md`** | **Start here** — full math (simple+technical), code, literature, differentiation |
+| `docs/PROFESSOR_BRIEFING.md` | Short talk script for advisors |
+| `papers/LITERATURE_SURVEY.md` | Compact related-work notes |
 | `papers/PAPER_DRAFT.md` | Working research paper draft |
 | `research/SAMPLE-BASED-UBE-FOR-DIFFUSION.md` | Theory north-star (Claim A) |
 
