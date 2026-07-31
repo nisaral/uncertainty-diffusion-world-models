@@ -47,6 +47,9 @@ agent:
 mbpo:
   real_ratio: 0.05
   rollout_length: 1
+  # Horizon curriculum: grow imagined horizon from start → end over this many env steps after warmup
+  rollout_length_start: 1
+  horizon_curriculum_steps: 0
   rollouts_per_step: 400
   model_train_freq: 250
   model_retain_epochs: 1

@@ -1,78 +1,92 @@
 # Uncertainty-Aware Diffusion World Models for RL
 
-Open research stack: **diffusion / Gaussian world models** + **MC-UBE multi-step epistemic uncertainty** + MBPO/SAC, with paths to joint reward diffusion and consistency distillation.
+Open research code: **diffusion / Gaussian world models** + **MC-UBE multi-step epistemic uncertainty** + MBPO/SAC, with joint reward and consistency-distillation paths.
 
-| Doc | When to read |
-|---|---|
-| **`docs/CODE_AND_THEORY_GUIDE.md`** | **Start here** — full math (simple+technical), code, literature, differentiation |
-| `docs/PROFESSOR_BRIEFING.md` | Short talk script for advisors |
-| `papers/LITERATURE_SURVEY.md` | Compact related-work notes |
-| `papers/PAPER_DRAFT.md` | Working research paper draft |
-| `research/SAMPLE-BASED-UBE-FOR-DIFFUSION.md` | Theory north-star (Claim A) |
-
-**GitHub:** https://github.com/nisaral/uncertainty-diffusion-world-models
+**Repo:** https://github.com/nisaral/uncertainty-diffusion-world-models
 
 ---
 
-## Quick start
+## Install & quick start
 
 ```bash
 pip install -r requirements.txt
-# optional plots: pip install matplotlib
 
 python -m udwm.scripts.smoke_test
-python -m udwm.scripts.train_mbpo --config configs/smoke_train.yaml
-python theory/toy_ube_mdp.py
 python -m pytest tests/test_core.py -q
+python theory/toy_ube_mdp.py
+
+python -m udwm.scripts.train_mbpo --config configs/smoke_train.yaml
 ```
 
-### Experiments
+### More experiments
 
 ```bash
-# Ablations (Gaussian / diffusion / joint-R / no-UBE)
+# Multi-seed aggregate
+python -m udwm.scripts.run_multiseed --config configs/smoke_train.yaml --seeds 0 1 2 --steps 2000
+
+# Ablations
 python -m udwm.scripts.run_ablations --config configs/ablation_fast.yaml --steps 2000
 
-# Consistency-distilled 1-step student
+# Consistency distill (1-step student)
 python -m udwm.scripts.train_mbpo --config configs/consistency_distill.yaml
 
-# Joint reward in diffusion (Gap 1)
+# Joint reward diffusion
 python -m udwm.scripts.train_mbpo --config configs/joint_reward.yaml
 
-# Throughput + plots
+# Longer Pendulum (horizon curriculum 1→3)
+python -m udwm.scripts.train_mbpo --config configs/pendulum_long.yaml --steps 25000
+
+# Throughput + model diagnostics
 python -m udwm.scripts.benchmark_throughput
+python -m udwm.scripts.diagnose_model --config configs/smoke_train.yaml
 python -m udwm.scripts.plot_results
 ```
 
----
+### Flags
 
-## Research map
-
-| Gap | Question | Status |
-|---|---|---|
-| Core | Shared WM + UBE + SAC stack | Done |
-| Gap 3 | Continuous control + diffusion UQ + distill | Code + draft paper |
-| Gap 1 | Joint reward in diffusion | Implemented path |
-| Gap 2 | Multi-agent state→value uncertainty | Future |
-
----
-
-## Package layout
-
-```
-udwm/models/       Gaussian, diffusion, joint-R, consistency distill
-udwm/uncertainty/  MC-UBE local rewards + U-network
-udwm/rl/           SAC + MBPO trainer
-udwm/eval/         return, MSE, calibration, throughput
-udwm/scripts/      train, ablate, plot, evaluate, smoke
-theory/            exact UBE MRP + MC estimator toys
-papers/            literature survey + paper draft + bib
-docs/              understanding guide + professor briefing
+```text
+--model gaussian|diffusion
+--joint-reward | --separate-reward
+--no-ube
+--steps N
+--device cpu|cuda
 ```
 
 ---
 
-## Citation lineage (short)
+## What this code implements
 
-MBPO · PETS · Luis exact UBE · DIAMOND · Consistency models · WIMLE · Wang et al. multi-agent diffusion PO  
+| Piece | Location |
+|---|---|
+| Gaussian ensemble dynamics | `udwm/models/gaussian_ensemble.py` |
+| Diffusion ensemble (+ joint reward) | `udwm/models/diffusion_dynamics.py` |
+| Consistency distillation | `udwm/models/consistency.py` |
+| MC-UBE local rewards + U-net | `udwm/uncertainty/mc_ube.py` |
+| SAC + optional \(Q\pm\lambda\sqrt{U}\) | `udwm/rl/sac.py` |
+| MBPO trainer + horizon curriculum | `udwm/rl/trainer.py` |
+| Exact UBE toy MRP | `theory/toy_ube_mdp.py` |
+| Paper draft / short lit notes | `papers/` |
 
-See `papers/LITERATURE_SURVEY.md` and `papers/references.bib`.
+**Research claim (short):** Luis et al. (2023) give a distribution-agnostic Uncertainty Bellman Equation; we implement **Monte Carlo estimators** of local UBE rewards for **diffusion / consistency** world-model ensembles and a full continuous-control MBRL stack.
+
+---
+
+## Layout
+
+```
+udwm/          Python package
+configs/       YAML experiments
+theory/        Math toys (no neural nets)
+papers/        Paper draft + bib + short literature notes
+tests/         Unit tests
+```
+
+Personal study notes live only on your machine under `private_notes/` (gitignored).
+
+---
+
+## Citation lineage
+
+MBPO · PETS · Luis exact UBE · DIAMOND · Consistency models · WIMLE  
+
+See `papers/LITERATURE_SURVEY.md` and `papers/PAPER_DRAFT.md`.

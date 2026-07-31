@@ -17,3 +17,8 @@ checkpoints/
 .idea/
 .vscode/
 *.log
+
+# Personal study / talk notes — never push
+private_notes/
+docs/
+*.local.md

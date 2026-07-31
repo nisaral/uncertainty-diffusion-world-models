@@ -93,17 +93,15 @@ class MCUBELocalRewards:
                 member_means.append(mu)
                 member_vars.append(var)
             else:
-                # diffusion: MC samples from member i
+                # diffusion / student: batch M samples then one Q pass on flat batch
                 samples = dyn.sample_next_multi(obs, actions, m=self.m_samples, member=i)
-                # samples: [M,B,obs]
-                m = samples.shape[0]
-                qs = []
-                for j in range(m):
-                    a2 = policy_fn(samples[j])
-                    qs.append(q_fn(samples[j], a2))
-                qs_t = torch.stack(qs, 0)
-                mu = qs_t.mean(0)
-                var = qs_t.var(0, unbiased=False)
+                # samples: [M, B, obs_dim]
+                m_sz, b_sz, o_dim = samples.shape
+                flat_s = samples.reshape(m_sz * b_sz, o_dim)
+                flat_a = policy_fn(flat_s)
+                flat_q = q_fn(flat_s, flat_a).reshape(m_sz, b_sz, 1)
+                mu = flat_q.mean(0)
+                var = flat_q.var(0, unbiased=False)
                 member_means.append(mu)
                 member_vars.append(var)
 

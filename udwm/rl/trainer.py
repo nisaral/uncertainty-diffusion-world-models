@@ -100,6 +100,19 @@ class MBPOTrainer:
         self.total_steps = 0
         self.logs: list = []
 
+        # Optional horizon curriculum: start short, grow to rollout_length
+        self._horizon_start = int(mbcfg.get("rollout_length_start", mbcfg["rollout_length"]))
+        self._horizon_end = int(mbcfg["rollout_length"])
+        self._horizon_warmup = int(mbcfg.get("horizon_curriculum_steps", 0))
+
+    def _current_horizon(self) -> int:
+        if self._horizon_warmup <= 0 or self._horizon_end <= self._horizon_start:
+            return self._horizon_end
+        t = min(max(self.total_steps - int(self.mbcfg["warmup_steps"]), 0), self._horizon_warmup)
+        frac = t / max(self._horizon_warmup, 1)
+        h = self._horizon_start + frac * (self._horizon_end - self._horizon_start)
+        return max(1, int(round(h)))
+
     def _train_world_model(self) -> Dict[str, float]:
         if len(self.real_buffer) < self.mbcfg["model_batch_size"]:
             return {}
@@ -127,7 +140,7 @@ class MBPOTrainer:
         if len(self.real_buffer) < self.mbcfg["model_batch_size"]:
             return
         n = int(self.mbcfg["rollouts_per_step"])
-        h = int(self.mbcfg["rollout_length"])
+        h = self._current_horizon()
         batch = self.real_buffer.sample(n)
         obs = batch["obs"]
 
