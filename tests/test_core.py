@@ -113,6 +113,41 @@ def test_joint_reward_diffusion():
     assert r2.shape == (4, 1)
 
 
+def test_u_gated_rollout_and_adaptive_mc():
+    from udwm.models.world_model import WorldModel
+    from udwm.rl.u_gated_imagination import u_gated_rollout
+    from udwm.uncertainty.adaptive_mc import AdaptiveMCUBELocalRewards
+    from udwm.uncertainty.mc_ube import UNetwork
+
+    wm = WorldModel.build(
+        "diffusion", 3, 1, ensemble_size=2, hidden_dims=(32, 32),
+        diffusion_steps=4, sample_steps=2,
+    )
+    u_net = UNetwork(3, 1, (32, 32))
+    obs = torch.randn(8, 3)
+
+    def policy_fn(o):
+        return torch.zeros(o.shape[0], 1)
+
+    roll = u_gated_rollout(
+        wm, policy_fn, u_net, obs, horizon=2, mode="both",
+        stop_percentile=0.7, weight_beta=1.0,
+    )
+    assert roll["obs"].shape == (8, 2, 3)
+    assert roll["weights"].shape == (8, 2, 1)
+    assert "stopped_frac" in roll
+
+    def q_fn(o, a):
+        return u_net(o, a)
+
+    adaptive = AdaptiveMCUBELocalRewards(m_min=2, m_max=6, m_probe=2, enabled=True)
+    act = torch.randn(8, 1)
+    out = adaptive.estimate(wm, q_fn, policy_fn, obs, act)
+    assert out["u"].shape == (8, 1)
+    assert "m_mean" in out
+    assert "refine_frac_used" in out
+
+
 def test_consistency_distill_build():
     wm = WorldModel.build(
         "diffusion",
