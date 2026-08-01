@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import gymnasium as gym
 import numpy as np
 import torch
 from tqdm import trange
@@ -16,12 +15,14 @@ from udwm.eval.metrics import (
 )
 from udwm.models.world_model import WorldModel
 from udwm.rl.sac import SACAgent
+from udwm.rl.u_gated_imagination import u_gated_rollout
+from udwm.uncertainty.adaptive_mc import AdaptiveMCUBELocalRewards
 from udwm.uncertainty.mc_ube import MCUBELocalRewards, UNetwork, ube_loss
 from udwm.utils.torch_utils import get_device
 
 
 class MBPOTrainer:
-    """Shared MBPO-style loop: real env data → train WM → imagine → SAC (+ optional UBE)."""
+    """MBPO-style loop with optional U-gated imagination (A) and adaptive MC-UBE (B)."""
 
     def __init__(self, cfg: Dict[str, Any]) -> None:
         self.cfg = cfg
@@ -78,12 +79,36 @@ class MBPOTrainer:
         )
 
         ucfg = cfg["ube"]
-        self.u_net = UNetwork(self.obs_dim, self.action_dim, tuple(ucfg["hidden_dims"])).to(self.device)
-        self.agent.attach_u_net(self.u_net, lr=float(acfg["critic_lr"]))
-        self.mc_ube = MCUBELocalRewards(
-            u_min=float(ucfg.get("u_min", 0.0)),
-            m_samples=int(ucfg.get("m_samples", 8)),
+        self.u_net = UNetwork(self.obs_dim, self.action_dim, tuple(ucfg["hidden_dims"])).to(
+            self.device
         )
+        self.agent.attach_u_net(self.u_net, lr=float(acfg["critic_lr"]))
+
+        # --- Novelty B: adaptive MC budget ---
+        acfg_mc = ucfg.get("adaptive_mc", {}) or {}
+        if bool(acfg_mc.get("enabled", False)):
+            self.mc_ube: MCUBELocalRewards = AdaptiveMCUBELocalRewards(
+                u_min=float(ucfg.get("u_min", 0.0)),
+                m_min=int(acfg_mc.get("m_min", 2)),
+                m_max=int(acfg_mc.get("m_max", ucfg.get("m_samples", 8))),
+                m_probe=acfg_mc.get("m_probe"),
+                refine_frac=float(acfg_mc.get("refine_frac", 0.5)),
+                w_refine_percentile=float(acfg_mc.get("w_refine_percentile", 0.5)),
+                k_min=acfg_mc.get("k_min", mcfg.get("sample_steps")),
+                k_max=acfg_mc.get("k_max"),
+                enabled=True,
+            )
+        else:
+            self.mc_ube = MCUBELocalRewards(
+                u_min=float(ucfg.get("u_min", 0.0)),
+                m_samples=int(ucfg.get("m_samples", 8)),
+            )
+
+        # --- Novelty A: U-gated imagination ---
+        self.u_gate_cfg = cfg.get("u_gate", {}) or {}
+        self.u_gate_mode = str(self.u_gate_cfg.get("mode", "off")).lower()
+        self.u_gate_enable_after = int(self.u_gate_cfg.get("enable_after_steps", 0))
+        self.prioritized_model = bool(self.u_gate_cfg.get("prioritized_model_sampling", True))
 
         mbcfg = cfg["mbpo"]
         self.real_buffer = ReplayBuffer(
@@ -100,7 +125,6 @@ class MBPOTrainer:
         self.total_steps = 0
         self.logs: list = []
 
-        # Optional horizon curriculum: start short, grow to rollout_length
         self._horizon_start = int(mbcfg.get("rollout_length_start", mbcfg["rollout_length"]))
         self._horizon_end = int(mbcfg["rollout_length"])
         self._horizon_warmup = int(mbcfg.get("horizon_curriculum_steps", 0))
@@ -130,15 +154,14 @@ class MBPOTrainer:
             )
             self.wm_opt.zero_grad()
             out["total"].backward()
-            nn_clip = 10.0
-            torch.nn.utils.clip_grad_norm_(self.world_model.parameters(), nn_clip)
+            torch.nn.utils.clip_grad_norm_(self.world_model.parameters(), 10.0)
             self.wm_opt.step()
             losses.append(float(out["total"].item()))
         return {"wm_loss": float(np.mean(losses))}
 
-    def _imagine(self) -> None:
+    def _imagine(self) -> Dict[str, float]:
         if len(self.real_buffer) < self.mbcfg["model_batch_size"]:
-            return
+            return {}
         n = int(self.mbcfg["rollouts_per_step"])
         h = self._current_horizon()
         batch = self.real_buffer.sample(n)
@@ -147,31 +170,64 @@ class MBPOTrainer:
         def policy_fn(o: torch.Tensor) -> torch.Tensor:
             return self.agent.policy_tensor(o, deterministic=False)
 
+        info: Dict[str, float] = {"imagine_horizon": float(h)}
+        # Warmup U-net before gating so random U does not kill all rollouts
+        gate_mode = self.u_gate_mode
+        if self.total_steps < self.u_gate_enable_after:
+            gate_mode = "off"
         with torch.no_grad():
-            roll = self.world_model.rollout(obs, policy_fn, horizon=h)
-        # flatten [B,H,...] into buffer
-        b, hh = roll["obs"].shape[0], roll["obs"].shape[1]
-        for t in range(hh):
-            self.model_buffer.add_batch(
-                roll["obs"][:, t].cpu().numpy(),
-                roll["actions"][:, t].cpu().numpy(),
-                roll["rewards"][:, t].cpu().numpy(),
-                roll["next_obs"][:, t].cpu().numpy(),
-                roll["dones"][:, t].cpu().numpy(),
+            roll = u_gated_rollout(
+                self.world_model,
+                policy_fn,
+                self.u_net,
+                obs,
+                horizon=h,
+                mode=gate_mode,
+                stop_threshold=self.u_gate_cfg.get("stop_threshold"),
+                stop_percentile=float(self.u_gate_cfg.get("stop_percentile", 0.85)),
+                weight_beta=float(self.u_gate_cfg.get("weight_beta", 1.0)),
+                min_weight=float(self.u_gate_cfg.get("min_weight", 0.05)),
+                use_sqrt=bool(self.u_gate_cfg.get("use_sqrt", True)),
             )
+
+        b, hh = roll["obs"].shape[0], roll["obs"].shape[1]
+        n_added = 0
+        for t in range(hh):
+            w = roll["weights"][:, t, 0].cpu().numpy()
+            keep = w > float(self.u_gate_cfg.get("min_store_weight", 1e-4))
+            if not np.any(keep):
+                continue
+            self.model_buffer.add_batch(
+                roll["obs"][keep, t].cpu().numpy(),
+                roll["actions"][keep, t].cpu().numpy(),
+                roll["rewards"][keep, t].cpu().numpy(),
+                roll["next_obs"][keep, t].cpu().numpy(),
+                roll["dones"][keep, t].cpu().numpy(),
+                weights=w[keep],
+            )
+            n_added += int(keep.sum())
+
+        info["imagine_added"] = float(n_added)
+        info["imagine_stopped_frac"] = float(roll["stopped_frac"].item())
+        info["imagine_mean_weight"] = float(roll["weights"].mean().item())
+        info["imagine_mean_sqrt_u"] = float(roll["sqrt_u"].mean().item())
+        if float(roll["stop_threshold_used"].item()) >= 0:
+            info["imagine_stop_thresh"] = float(roll["stop_threshold_used"].item())
+        return info
 
     def _mixed_batch(self) -> Dict[str, torch.Tensor]:
         bs = int(self.acfg["batch_size"])
         real_ratio = float(self.mbcfg["real_ratio"])
         n_real = int(bs * real_ratio)
         n_model = bs - n_real
+        use_prio = self.prioritized_model and self.u_gate_mode in ("weight", "both")
         if len(self.model_buffer) < max(n_model, 1) or n_model == 0:
             return self.real_buffer.sample(bs)
         if n_real == 0:
-            return self.model_buffer.sample(bs)
+            return self.model_buffer.sample(bs, prioritized=use_prio)
         real = self.real_buffer.sample(n_real)
-        model = self.model_buffer.sample(n_model)
-        return {k: torch.cat([real[k], model[k]], dim=0) for k in real}
+        model = self.model_buffer.sample(n_model, prioritized=use_prio)
+        return {k: torch.cat([real[k], model[k]], dim=0) for k in real if k in model}
 
     def _update_ube(self, batch: Dict[str, torch.Tensor]) -> Dict[str, float]:
         if not self.acfg.get("use_ube", True):
@@ -185,7 +241,9 @@ class MBPOTrainer:
         def policy_fn(o):
             return self.agent.policy_tensor(o, deterministic=False)
 
-        local = self.mc_ube.estimate(self.world_model, q_fn, policy_fn, batch["obs"], batch["actions"])
+        local = self.mc_ube.estimate(
+            self.world_model, q_fn, policy_fn, batch["obs"], batch["actions"]
+        )
         with torch.no_grad():
             next_a = policy_fn(batch["next_obs"])
             next_u = self.u_net(batch["next_obs"], next_a)
@@ -196,12 +254,17 @@ class MBPOTrainer:
         self.agent.u_opt.zero_grad()
         loss.backward()
         self.agent.u_opt.step()
-        return {
+        out = {
             "ube_loss": float(loss.item()),
             "u_mean": float(local["u"].mean().item()),
             "w_mean": float(local["w"].mean().item()),
             "g_mean": float(local["g"].mean().item()),
         }
+        if "m_mean" in local:
+            out["mc_m_mean"] = float(local["m_mean"].item())
+        if "refine_frac_used" in local:
+            out["mc_refine_frac"] = float(local["refine_frac_used"].item())
+        return out
 
     def _env_step(self) -> float:
         if self.total_steps < int(self.mbcfg["warmup_steps"]):
@@ -233,7 +296,6 @@ class MBPOTrainer:
 
     @torch.no_grad()
     def evaluate_full(self, n_episodes: int = 10) -> Dict[str, float]:
-        """Policy return + world-model accuracy + U calibration (for Gap 3 empirics)."""
         out: Dict[str, float] = {}
         out.update(
             evaluate_policy_return(
@@ -248,12 +310,17 @@ class MBPOTrainer:
         if len(self.real_buffer) >= 64:
             out.update(
                 evaluate_world_model_accuracy(
-                    self.world_model, self.real_buffer, batch_size=min(256, len(self.real_buffer))
+                    self.world_model,
+                    self.real_buffer,
+                    batch_size=min(256, len(self.real_buffer)),
                 )
             )
             out.update(
                 evaluate_uncertainty_calibration(
-                    self.agent, self.u_net, self.real_buffer, batch_size=min(256, len(self.real_buffer))
+                    self.agent,
+                    self.u_net,
+                    self.real_buffer,
+                    batch_size=min(256, len(self.real_buffer)),
                 )
             )
         return out
@@ -274,13 +341,12 @@ class MBPOTrainer:
 
             if self.total_steps >= warmup and self.total_steps % model_freq == 0:
                 last_info.update(self._train_world_model())
-                self._imagine()
+                last_info.update(self._imagine())
 
             if self.total_steps >= warmup and len(self.real_buffer) >= self.acfg["batch_size"]:
                 for _u in range(agent_updates):
                     batch = self._mixed_batch()
                     last_info.update(self.agent.update(batch))
-                    # UBE update less frequently for cost (every agent update batch is OK for small envs)
                     if self.acfg.get("use_ube", True) and _u == 0:
                         last_info.update(self._update_ube(batch))
 
@@ -289,6 +355,8 @@ class MBPOTrainer:
                     r=f"{recent_r:.2f}",
                     wm=last_info.get("wm_loss", 0),
                     ube=last_info.get("ube_loss", 0),
+                    stop=last_info.get("imagine_stopped_frac", 0),
+                    m=last_info.get("mc_m_mean", 0),
                 )
                 self.logs.append({"step": self.total_steps, **last_info})
 
@@ -299,8 +367,8 @@ class MBPOTrainer:
                     f"step={self.total_steps} "
                     f"return={full.get('return_mean', 0):.1f} "
                     f"s_mse={full.get('next_state_mse', float('nan')):.4f} "
-                    f"r_mse={full.get('reward_mse', float('nan')):.4f} "
-                    f"u_corr={full.get('corr_std_abserr', float('nan')):.3f}"
+                    f"stop={last_info.get('imagine_stopped_frac', 0):.2f} "
+                    f"m={last_info.get('mc_m_mean', 0):.1f}"
                 )
                 self.logs.append({"step": self.total_steps, **full})
 

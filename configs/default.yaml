@@ -25,11 +25,33 @@ reward_term:
   joint_with_diffusion: false
   hidden_dims: [128, 128]
 
+# Novelty A: U-gated imagination (off by default for baseline)
+u_gate:
+  mode: off               # off | stop | weight | both
+  enable_after_steps: 0   # delay gating until U-net has trained
+  stop_threshold: null
+  stop_percentile: 0.85
+  weight_beta: 1.0
+  min_weight: 0.05
+  min_store_weight: 0.05
+  use_sqrt: true
+  prioritized_model_sampling: true
+
 ube:
-  m_samples: 8          # MC next-state samples per ensemble member
+  m_samples: 8          # MC next-state samples per ensemble member (if adaptive off)
   u_min: 0.0            # clip local uncertainty rewards
   gamma_u: null         # if null, use agent gamma**2 for UBE targets
   hidden_dims: [256, 256]
+  # Novelty B: adaptive MC budget (off by default)
+  adaptive_mc:
+    enabled: false
+    m_min: 2
+    m_max: 12
+    m_probe: 2
+    refine_frac: 0.5
+    w_refine_percentile: 0.5
+    k_min: null
+    k_max: null
 
 agent:
   gamma: 0.99

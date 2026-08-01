@@ -69,6 +69,17 @@ python -m udwm.scripts.plot_results
 
 **Research claim (short):** Luis et al. (2023) give a distribution-agnostic Uncertainty Bellman Equation; we implement **Monte Carlo estimators** of local UBE rewards for **diffusion / consistency** world-model ensembles and a full continuous-control MBRL stack.
 
+### Architectural novelty (A+B)
+
+| Module | Idea | Config |
+|---|---|---|
+| **A — U-gated imagination** | Stop / down-weight imagined transitions when \(\sqrt{U}\) is high | `u_gate.mode: stop\|weight\|both` |
+| **B — Adaptive MC-UBE** | Probe with few samples; refine high-\(w\) states with more \(M\) (and optional NFE) | `ube.adaptive_mc.enabled: true` |
+
+```bash
+python -m udwm.scripts.train_mbpo --config configs/ab_novel.yaml
+```
+
 ---
 
 ## Layout
