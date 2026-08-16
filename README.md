@@ -78,7 +78,12 @@ python -m udwm.scripts.plot_results
 
 ```bash
 python -m udwm.scripts.train_mbpo --config configs/ab_novel.yaml
+# Selective prediction diagnostics (√U as a *score*, not a guaranteed threshold)
+python -m udwm.scripts.eval_selective --config configs/ab_novel.yaml
 ```
+
+Gate decisions can be replayed from `runs/gate_audit.jsonl` (`decision`, `sqrt_u`, `tau`, `reason`).  
+`eval_selective` reports risk–coverage and **over-rejection** if √U is treated as an absolute threshold. These are measurements, not conformal coverage.
 
 ---
 

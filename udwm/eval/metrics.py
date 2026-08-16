@@ -50,34 +50,49 @@ def evaluate_world_model_accuracy(
     batch_size: int = 512,
     n_batches: int = 5,
     device: Optional[torch.device] = None,
+    mean_samples: int = 16,
 ) -> Dict[str, float]:
-    """One-step next-state / reward prediction error on real buffer data."""
+    """One-step next-state / reward prediction error on real buffer data.
+
+    Reports both a MEAN-prediction MSE (comparable across model classes) and a
+    single-draw MSE. For a stochastic model the single draw is inflated by the
+    model's own aleatoric variance, so comparing a diffusion draw against a
+    Gaussian ensemble's analytic mean measures stochasticity, not accuracy.
+    """
     if len(buffer) < batch_size:
         batch_size = max(1, len(buffer))
     device = device or torch.device("cpu")
-    ms_list, rs_list = [], []
+    ms_list, rs_list, draw_list = [], [], []
+    dyn = world_model.dynamics
     for _ in range(n_batches):
         batch = buffer.sample(batch_size)
         obs, act = batch["obs"], batch["actions"]
         nxt, rew = batch["next_obs"], batch["rewards"]
         if getattr(world_model, "model_type", "") == "gaussian":
-            pred_n, pred_r = world_model.dynamics.sample_next(obs, act, deterministic=True)
-        elif getattr(world_model, "joint_reward", False) and hasattr(
-            world_model.dynamics, "sample_next_with_reward"
-        ):
-            pred_n, pred_r = world_model.dynamics.sample_next_with_reward(
-                obs, act, deterministic=True
-            )
+            pred_n, pred_r = dyn.mean_next(obs, act)
+            draw_n, _ = dyn.sample_next(obs, act, deterministic=False)
+        elif hasattr(dyn, "predict_mean"):
+            pred_n, pred_r_joint = dyn.predict_mean(obs, act, m=mean_samples)
+            draw_n = dyn.sample_next(obs, act, deterministic=False)
+            if getattr(world_model, "joint_reward", False):
+                pred_r = pred_r_joint
+            elif world_model.reward_model is not None:
+                pred_r, _ = world_model.reward_model.predict(obs, act)
+            else:
+                pred_r = torch.zeros_like(rew)
         else:
-            pred_n = world_model.dynamics.sample_next(obs, act, deterministic=True)
+            pred_n = dyn.sample_next(obs, act, deterministic=True)
+            draw_n = pred_n
             if world_model.reward_model is not None:
                 pred_r, _ = world_model.reward_model.predict(obs, act)
             else:
                 pred_r = torch.zeros_like(rew)
         ms_list.append(float(((pred_n - nxt) ** 2).mean().item()))
         rs_list.append(float(((pred_r - rew) ** 2).mean().item()))
+        draw_list.append(float(((draw_n - nxt) ** 2).mean().item()))
     return {
         "next_state_mse": float(np.mean(ms_list)),
+        "next_state_mse_single_draw": float(np.mean(draw_list)),
         "reward_mse": float(np.mean(rs_list)),
     }
 

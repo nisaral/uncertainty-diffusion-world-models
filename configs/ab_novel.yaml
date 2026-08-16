@@ -31,6 +31,8 @@ u_gate:
   min_store_weight: 0.05
   use_sqrt: true
   prioritized_model_sampling: true
+  audit: true
+  audit_path: runs/gate_audit.jsonl
 
 ube:
   m_samples: 8

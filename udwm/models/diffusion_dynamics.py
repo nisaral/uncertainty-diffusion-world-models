@@ -222,11 +222,41 @@ class DiffusionDynamicsEnsemble(nn.Module):
         actions: torch.Tensor,
         steps: Optional[int] = None,
         deterministic: bool = True,
+        mc_mean_samples: int = 0,
+        x_T: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """Sample x0 for member i.
+
+        The DDIM update below is deterministic *given* x_T, so all sampling
+        randomness enters through the x_T ~ N(0,I) draw. ``deterministic=True``
+        therefore does NOT yield a point prediction on its own: use
+        ``mc_mean_samples > 0`` to average over x_T and approximate E[x0], which
+        is the right quantity to compare against a Gaussian ensemble's analytic
+        mean (see ``member_mean_next``).
+
+        ``x_T`` lets the caller supply the latent instead of drawing it. Passing
+        the *same* x_T to several members couples them: each member's marginal
+        law is unchanged, but their sampling errors become positively correlated,
+        which is what shrinks the finite-M bias and variance of the ensemble
+        variance ``w``. See ``research/COUPLED-MC-UBE-PROPOSAL.md``.
+        """
+        if deterministic and mc_mean_samples > 0:
+            xs = [
+                self._ddim_sample_member(i, obs, actions, steps, deterministic=False)
+                for _ in range(mc_mean_samples)
+            ]
+            return torch.stack(xs, 0).mean(0)
         steps = steps or self.sample_steps
         b = obs.shape[0]
         device = obs.device
-        x = torch.randn(b, self.x_dim, device=device)
+        if x_T is None:
+            x = torch.randn(b, self.x_dim, device=device)
+        else:
+            if x_T.shape != (b, self.x_dim):
+                raise ValueError(
+                    f"x_T must have shape {(b, self.x_dim)}, got {tuple(x_T.shape)}"
+                )
+            x = x_T.to(device)
         ts = torch.linspace(self.diffusion_steps - 1, 0, steps, device=device).long()
         for j, t in enumerate(ts):
             t_batch = torch.full((b,), int(t.item()), device=device, dtype=torch.long)
@@ -252,10 +282,16 @@ class DiffusionDynamicsEnsemble(nn.Module):
         member: Optional[int] = None,
         deterministic: bool = True,
         steps: Optional[int] = None,
+        mc_mean_samples: int = 0,
     ) -> torch.Tensor:
         """Sample next_obs. If joint_reward, also caches last_reward on self."""
         next_obs, reward = self.sample_next_with_reward(
-            obs, actions, member=member, deterministic=deterministic, steps=steps
+            obs,
+            actions,
+            member=member,
+            deterministic=deterministic,
+            steps=steps,
+            mc_mean_samples=mc_mean_samples,
         )
         self.last_reward = reward
         return next_obs
@@ -268,6 +304,7 @@ class DiffusionDynamicsEnsemble(nn.Module):
         member: Optional[int] = None,
         deterministic: bool = True,
         steps: Optional[int] = None,
+        mc_mean_samples: int = 0,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         b = obs.shape[0]
         device = obs.device
@@ -279,7 +316,9 @@ class DiffusionDynamicsEnsemble(nn.Module):
                 mask = idxs == i
                 if not mask.any():
                     continue
-                x = self._ddim_sample_member(i, obs[mask], actions[mask], steps, deterministic)
+                x = self._ddim_sample_member(
+                    i, obs[mask], actions[mask], steps, deterministic, mc_mean_samples
+                )
                 delta, r = self._unpack_x(x)
                 next_obs[mask] = obs[mask] + delta
                 if r is not None:
@@ -287,11 +326,41 @@ class DiffusionDynamicsEnsemble(nn.Module):
             if not self.joint_reward:
                 rewards = torch.zeros(b, 1, device=device)
             return next_obs, rewards
-        x = self._ddim_sample_member(member, obs, actions, steps, deterministic)
+        x = self._ddim_sample_member(
+            member, obs, actions, steps, deterministic, mc_mean_samples
+        )
         delta, r = self._unpack_x(x)
         if r is None:
             r = torch.zeros(b, 1, device=device)
         return obs + delta, r
+
+    @torch.no_grad()
+    def predict_mean(
+        self,
+        obs: torch.Tensor,
+        actions: torch.Tensor,
+        m: int = 16,
+        steps: Optional[int] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Ensemble-mean point prediction E[s'], E[r] via MC over x_T.
+
+        This is the counterpart of ``GaussianEnsemble.mean_next``. Scoring a
+        single stochastic draw against the ground truth (as a bare
+        ``sample_next`` call does) inflates MSE by the model's own aleatoric
+        variance, which penalises the diffusion model for being stochastic
+        rather than for being wrong.
+        """
+        nxt, rew = [], []
+        for i in range(self.ensemble_size):
+            xs = [
+                self._ddim_sample_member(i, obs, actions, steps, deterministic=False)
+                for _ in range(m)
+            ]
+            x = torch.stack(xs, 0).mean(0)
+            delta, r = self._unpack_x(x)
+            nxt.append(obs + delta)
+            rew.append(r if r is not None else torch.zeros(obs.shape[0], 1, device=obs.device))
+        return torch.stack(nxt, 0).mean(0), torch.stack(rew, 0).mean(0)
 
     @torch.no_grad()
     def predict_done(self, obs: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
@@ -311,6 +380,55 @@ class DiffusionDynamicsEnsemble(nn.Module):
             self.sample_next(obs, actions, member=member, steps=steps) for _ in range(m)
         ]
         return torch.stack(samples, dim=0)
+
+    @torch.no_grad()
+    def sample_next_coupled(
+        self,
+        obs: torch.Tensor,
+        actions: torch.Tensor,
+        m: int,
+        steps: Optional[int] = None,
+        coupled: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Draw m samples from EVERY member, sharing latents across members.
+
+        Returns ``(next_obs, rewards)`` shaped ``[N, m, B, obs_dim]`` and
+        ``[N, m, B, 1]``.
+
+        With ``coupled=True`` the m latents are drawn once and reused for all N
+        members, so member i and member j see the same x_T. Because the DDIM map
+        is deterministic given x_T, this is a genuine coupling: each member's
+        marginal is untouched (so w*, g*, u* are unchanged as estimands) while
+        the members' MC errors become positively correlated. The finite-M bias of
+        the ensemble variance is exactly ``(g* - mean(Cov))/M``, i.e. the mean
+        pairwise *disagreement* variance over M, so correlating the members
+        shrinks it. Independent sampling is the worst case.
+
+        ``coupled=False`` draws fresh latents per member, reproducing the
+        independent-sampling behaviour, and exists so the two can be compared as
+        the single varied factor.
+        """
+        b = obs.shape[0]
+        device = obs.device
+        shared = (
+            [torch.randn(b, self.x_dim, device=device) for _ in range(m)]
+            if coupled
+            else None
+        )
+        nxt, rew = [], []
+        for i in range(self.ensemble_size):
+            n_i, r_i = [], []
+            for j in range(m):
+                x_T = shared[j] if shared is not None else None
+                x = self._ddim_sample_member(
+                    i, obs, actions, steps, deterministic=False, x_T=x_T
+                )
+                delta, r = self._unpack_x(x)
+                n_i.append(obs + delta)
+                r_i.append(r if r is not None else torch.zeros(b, 1, device=device))
+            nxt.append(torch.stack(n_i, 0))
+            rew.append(torch.stack(r_i, 0))
+        return torch.stack(nxt, 0), torch.stack(rew, 0)
 
     @torch.no_grad()
     def member_mean_next(

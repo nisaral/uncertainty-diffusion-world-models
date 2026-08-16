@@ -33,11 +33,19 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
         k_min: Optional[int] = None,
         k_max: Optional[int] = None,
         enabled: bool = True,
+        gaussian_mean_blend: float = 0.0,
     ) -> None:
         super().__init__(u_min=u_min, m_samples=m_max)
-        self.m_min = max(1, int(m_min))
+        # Floor of 2, not 1: at M=1 the within-member variance g is unidentifiable,
+        # so neither g nor the finite-M debias exists and u = w - g is meaningless.
+        self.m_min = max(2, int(m_min))
         self.m_max = max(self.m_min, int(m_max))
-        self.m_probe = int(m_probe) if m_probe is not None else self.m_min
+        self.m_probe = max(2, int(m_probe)) if m_probe is not None else self.m_min
+        # Weight on the MC mean in the Gaussian branch's member mean.
+        # 0.0 == pure closed-form plug-in, matching MCUBELocalRewards.estimate so
+        # that adaptive-vs-uniform differs only in M.  A nonzero value changes the
+        # estimand (Q(E[s']) -> E[Q(s')]) and is fed to the debias as its noise scale.
+        self.gaussian_mean_blend = float(gaussian_mean_blend)
         self.refine_frac = float(refine_frac)  # max fraction of batch to refine
         self.w_refine_percentile = float(w_refine_percentile)
         self.k_min = k_min
@@ -80,9 +88,10 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
                         o2, _ = dyn.sample_next(obs_i, act_i, member=i, deterministic=False)
                         qs.append(q_fn(o2, policy_fn(o2)))
                     qs_t = torch.stack(qs, 0)
-                    var = qs_t.var(0, unbiased=False)
-                    # blend mean of stochastic with deterministic mean for stability
-                    mu = 0.5 * mu + 0.5 * qs_t.mean(0)
+                    var = qs_t.var(0, unbiased=True)
+                    beta = self.gaussian_mean_blend
+                    if beta > 0.0:
+                        mu = (1.0 - beta) * mu + beta * qs_t.mean(0)
                 member_means.append(mu)
                 member_vars.append(var)
             else:
@@ -107,15 +116,32 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
                 flat_s = samples_t.reshape(m_sz * b_sz, o_dim)
                 flat_q = q_fn(flat_s, policy_fn(flat_s)).reshape(m_sz, b_sz, 1)
                 member_means.append(flat_q.mean(0))
-                member_vars.append(flat_q.var(0, unbiased=False))
+                member_vars.append(flat_q.var(0, unbiased=m > 1))
         return torch.stack(member_means, 0), torch.stack(member_vars, 0)
 
-    @staticmethod
-    def _wg_from_members(means: torch.Tensor, vars_: torch.Tensor, u_min: float):
-        w = means.var(dim=0, unbiased=False)
-        g = vars_.mean(dim=0)
-        u = torch.clamp(w - g, min=u_min)
-        return u, w, g
+    def _wg_at_m(
+        self,
+        means: torch.Tensor,
+        vars_: torch.Tensor,
+        m_eff: int,
+        noise_scale: float,
+    ):
+        """(u, w, g) with the finite-M debias applied at this state's own budget.
+
+        Critical for the adaptive scheme: the naive bias scales as 1/M, so mixing
+        m_probe and m_max across a batch injects a state-dependent inflation that
+        anti-correlates with the refinement decision and compresses the very
+        uncertainty ranking refinement is meant to sharpen. Debiasing per-state
+        with the M actually spent removes that differential.
+        """
+        out = self.combine(means, vars_, m_eff=m_eff, mean_noise_scale=noise_scale)
+        return out["u"], out["w"], out["g"]
+
+    def _mean_noise_scale(self, world_model) -> float:
+        """Coefficient c in Var(member mean) = c^2 sigma^2/M, per model class."""
+        if getattr(world_model, "model_type", "diffusion") == "gaussian":
+            return self.gaussian_mean_blend
+        return 1.0
 
     @torch.no_grad()
     def estimate(
@@ -137,10 +163,12 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
         device = obs.device
         k_probe = self.k_min
 
+        noise_scale = self._mean_noise_scale(world_model)
+
         means_p, vars_p = self._member_stats(
             world_model, q_fn, policy_fn, obs, actions, self.m_probe, k_probe, idx=None
         )
-        u, w, g = self._wg_from_members(means_p, vars_p, self.u_min)
+        u, w, g = self._wg_at_m(means_p, vars_p, self.m_probe, noise_scale)
 
         # who to refine: top uncertainty by w
         w_flat = w.reshape(b)
@@ -170,7 +198,7 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
                 k_ref,
                 idx=refine_idx,
             )
-            u_r, w_r, g_r = self._wg_from_members(means_r, vars_r, self.u_min)
+            u_r, w_r, g_r = self._wg_at_m(means_r, vars_r, extra, noise_scale)
             u = u.clone()
             w = w.clone()
             g = g.clone()

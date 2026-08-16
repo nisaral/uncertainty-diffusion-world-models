@@ -7,12 +7,14 @@ import numpy as np
 import torch
 from tqdm import trange
 
+from udwm.data.audit_log import GateAuditLog
 from udwm.data.replay_buffer import ReplayBuffer
 from udwm.eval.metrics import (
     evaluate_policy_return,
     evaluate_uncertainty_calibration,
     evaluate_world_model_accuracy,
 )
+from udwm.eval.selective import collect_score_and_error, selective_report
 from udwm.models.world_model import WorldModel
 from udwm.rl.sac import SACAgent
 from udwm.rl.u_gated_imagination import u_gated_rollout
@@ -109,6 +111,13 @@ class MBPOTrainer:
         self.u_gate_mode = str(self.u_gate_cfg.get("mode", "off")).lower()
         self.u_gate_enable_after = int(self.u_gate_cfg.get("enable_after_steps", 0))
         self.prioritized_model = bool(self.u_gate_cfg.get("prioritized_model_sampling", True))
+        audit_path = self.u_gate_cfg.get("audit_path")
+        if audit_path is None:
+            audit_path = str(Path(cfg.get("paths", {}).get("log_dir", "runs")) / "gate_audit.jsonl")
+        self.audit = GateAuditLog(
+            path=audit_path,
+            enabled=bool(self.u_gate_cfg.get("audit", True)) and self.u_gate_mode != "off",
+        )
 
         mbcfg = cfg["mbpo"]
         self.real_buffer = ReplayBuffer(
@@ -213,6 +222,17 @@ class MBPOTrainer:
         info["imagine_mean_sqrt_u"] = float(roll["sqrt_u"].mean().item())
         if float(roll["stop_threshold_used"].item()) >= 0:
             info["imagine_stop_thresh"] = float(roll["stop_threshold_used"].item())
+        self.audit.record_batch(
+            step=self.total_steps,
+            obs=roll["obs"],
+            actions=roll["actions"],
+            sqrt_u=roll["sqrt_u"],
+            weights=roll["weights"],
+            dones=roll["dones"],
+            stop_threshold=float(roll["stop_threshold_used"].item()),
+            mode=gate_mode,
+        )
+        info.update({f"audit_{k}": v for k, v in self.audit.summary().items()})
         return info
 
     def _mixed_batch(self) -> Dict[str, torch.Tensor]:
@@ -323,6 +343,22 @@ class MBPOTrainer:
                     batch_size=min(256, len(self.real_buffer)),
                 )
             )
+            pair = collect_score_and_error(
+                self.agent, self.u_net, self.real_buffer, batch_size=min(256, len(self.real_buffer))
+            )
+            sel = selective_report(pair["score"], pair["abs_td"])
+            out["selective_rank_corr"] = float(sel["rank_corr_score_vs_error"])
+            # snapshot mid-coverage risk (keep 50%)
+            for row in sel["risk_coverage"]:
+                if abs(row["coverage"] - 0.5) < 0.08:
+                    out["selective_risk_at_50"] = float(row["risk_mean_abs_td"])
+                    break
+            # over-rejection at middle tau
+            sweep = sel["threshold_sweep"]
+            if sweep:
+                mid = sweep[len(sweep) // 2]
+                out["selective_over_rejection"] = float(mid["over_rejection"])
+                out["selective_recall_bad"] = float(mid["recall_bad"])
         return out
 
     def train(self, total_env_steps: Optional[int] = None) -> Dict[str, Any]:
