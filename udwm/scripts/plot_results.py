@@ -145,10 +145,68 @@ def plot_throughput(path: Path, out: Path) -> None:
     print("Wrote", png)
 
 
+def plot_selective(path: Path, out: Path) -> None:
+    """Risk–coverage + over-rejection plots from eval_selective JSON."""
+    with path.open(encoding="utf-8") as f:
+        report = json.load(f)
+    plt = _try_matplotlib()
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    rc = report.get("risk_coverage") or []
+    sw = report.get("threshold_sweep") or []
+    md_lines = [
+        "# Selective prediction (√U as a score, not a guarantee)",
+        "",
+        report.get("disclaimer", ""),
+        "",
+        f"rank_corr = {report.get('rank_corr_score_vs_error')}",
+        "",
+    ]
+    if rc:
+        md_lines += ["| coverage | abstention | risk |", "|---:|---:|---:|"]
+        for row in rc:
+            md_lines.append(
+                f"| {row['coverage']:.2f} | {row['abstention_rate']:.2f} | {row['risk_mean_abs_td']:.4f} |"
+            )
+    (out.with_suffix(".md")).write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    print("Wrote", out.with_suffix(".md"))
+
+    if plt is None:
+        print("matplotlib missing — skipped PNG")
+        return
+
+    if rc:
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.plot([r["coverage"] for r in rc], [r["risk_mean_abs_td"] for r in rc], marker="o")
+        ax.set_xlabel("coverage (fraction kept, lowest √U)")
+        ax.set_ylabel("risk (mean |TD| on kept)")
+        ax.set_title("Risk–coverage")
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(out.with_name(out.stem + "_risk_coverage.png"), dpi=150)
+        plt.close(fig)
+        print("Wrote", out.with_name(out.stem + "_risk_coverage.png"))
+
+    if sw:
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.plot([r["tau"] for r in sw], [r["over_rejection"] for r in sw], marker="o", label="over-rejection")
+        ax.plot([r["tau"] for r in sw], [r["recall_bad"] for r in sw], marker="s", label="recall of bad")
+        ax.set_xlabel("threshold τ on √U")
+        ax.set_ylabel("rate")
+        ax.set_title("If √U is treated as an absolute threshold")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(out.with_name(out.stem + "_over_rejection.png"), dpi=150)
+        plt.close(fig)
+        print("Wrote", out.with_name(out.stem + "_over_rejection.png"))
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--ablation", type=str, default=None)
     p.add_argument("--throughput", type=str, default=None)
+    p.add_argument("--selective", type=str, default=None, help="JSON from eval_selective")
     p.add_argument("--out-dir", type=str, default=str(ROOT / "runs" / "plots"))
     args = p.parse_args(argv)
     out_dir = Path(args.out_dir)
@@ -156,7 +214,9 @@ def main(argv=None) -> None:
         plot_ablation(Path(args.ablation), out_dir / "ablation")
     if args.throughput:
         plot_throughput(Path(args.throughput), out_dir / "throughput")
-    if not args.ablation and not args.throughput:
+    if args.selective:
+        plot_selective(Path(args.selective), out_dir / "selective")
+    if not args.ablation and not args.throughput and not args.selective:
         # defaults if present
         ab = ROOT / "runs" / "ablations" / "ablation_results.json"
         th = ROOT / "runs" / "throughput_benchmark.json"
@@ -164,8 +224,11 @@ def main(argv=None) -> None:
             plot_ablation(ab, out_dir / "ablation")
         if th.exists():
             plot_throughput(th, out_dir / "throughput")
-        if not ab.exists() and not th.exists():
-            print("No input JSON found. Pass --ablation and/or --throughput.")
+        sel = ROOT / "runs" / "selective_report.json"
+        if sel.exists():
+            plot_selective(sel, out_dir / "selective")
+        if not ab.exists() and not th.exists() and not sel.exists():
+            print("No input JSON found. Pass --ablation, --throughput, and/or --selective.")
 
 
 if __name__ == "__main__":
