@@ -68,16 +68,59 @@ DEFAULT_VARIANTS: List[Dict[str, Any]] = [
     },
 ]
 
+# Novelty A+B factorial (use with configs/ab_novel.yaml)
+AB_VARIANTS: List[Dict[str, Any]] = [
+    {
+        "name": "off",
+        "model_type": "diffusion",
+        "joint_reward": False,
+        "use_ube": True,
+        "optimism_lambda": 0.3,
+        "u_gate_mode": "off",
+        "adaptive_mc": False,
+    },
+    {
+        "name": "A_ugate",
+        "model_type": "diffusion",
+        "joint_reward": False,
+        "use_ube": True,
+        "optimism_lambda": 0.3,
+        "u_gate_mode": "both",
+        "adaptive_mc": False,
+    },
+    {
+        "name": "B_adapt_mc",
+        "model_type": "diffusion",
+        "joint_reward": False,
+        "use_ube": True,
+        "optimism_lambda": 0.3,
+        "u_gate_mode": "off",
+        "adaptive_mc": True,
+    },
+    {
+        "name": "AB_both",
+        "model_type": "diffusion",
+        "joint_reward": False,
+        "use_ube": True,
+        "optimism_lambda": 0.3,
+        "u_gate_mode": "both",
+        "adaptive_mc": True,
+    },
+]
+
 
 def apply_variant(cfg: Dict[str, Any], variant: Dict[str, Any], steps: int | None) -> Dict[str, Any]:
     c = deepcopy(cfg)
     c["model"]["type"] = variant["model_type"]
-    c["reward_term"]["joint_with_diffusion"] = bool(variant["joint_reward"])
+    c.setdefault("reward_term", {})["joint_with_diffusion"] = bool(variant.get("joint_reward", False))
     c["agent"]["use_ube"] = bool(variant["use_ube"])
     c["agent"]["optimism_lambda"] = float(variant.get("optimism_lambda", 0.0))
+    if "u_gate_mode" in variant:
+        c.setdefault("u_gate", {})["mode"] = variant["u_gate_mode"]
+    if "adaptive_mc" in variant:
+        c.setdefault("ube", {}).setdefault("adaptive_mc", {})["enabled"] = bool(variant["adaptive_mc"])
     if steps is not None:
         c["mbpo"]["total_env_steps"] = int(steps)
-    # shorter eval noise for ablations
     c["mbpo"]["eval_freq"] = max(int(c["mbpo"]["total_env_steps"] // 4), 250)
     return c
 
@@ -108,6 +151,12 @@ def run_one(cfg: Dict[str, Any], name: str, seed: int) -> Dict[str, Any]:
         "model": cfg["model"]["type"],
         "joint_reward": cfg["reward_term"]["joint_with_diffusion"],
         "use_ube": cfg["agent"]["use_ube"],
+        "u_gate_mode": cfg.get("u_gate", {}).get("mode", "off"),
+        "adaptive_mc": bool(cfg.get("ube", {}).get("adaptive_mc", {}).get("enabled", False)),
+        "selective_rank_corr": metrics.get("selective_rank_corr"),
+        "selective_over_rejection": metrics.get("selective_over_rejection"),
+        "selective_recall_bad": metrics.get("selective_recall_bad"),
+        "selective_risk_at_50": metrics.get("selective_risk_at_50"),
     }
     # learning curve points
     curve = [
@@ -129,11 +178,18 @@ def main(argv=None) -> None:
     parser.add_argument("--steps", type=int, default=None)
     parser.add_argument("--seeds", type=int, nargs="+", default=[0])
     parser.add_argument(
+        "--suite",
+        type=str,
+        choices=["core", "ab"],
+        default="core",
+        help="core = Gaussian/diffusion/UBE; ab = U-gate × adaptive-MC factorial",
+    )
+    parser.add_argument(
         "--variants",
         type=str,
         nargs="+",
         default=None,
-        help="Subset of variant names (default: all)",
+        help="Subset of variant names (default: all in the suite)",
     )
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--out", type=str, default=None)
@@ -143,12 +199,13 @@ def main(argv=None) -> None:
     if args.device:
         base["device"] = args.device
 
-    variants = DEFAULT_VARIANTS
+    pool = AB_VARIANTS if args.suite == "ab" else DEFAULT_VARIANTS
+    variants = pool
     if args.variants:
         allowed = set(args.variants)
-        variants = [v for v in DEFAULT_VARIANTS if v["name"] in allowed]
+        variants = [v for v in pool if v["name"] in allowed]
         if not variants:
-            raise SystemExit(f"No matching variants. Known: {[v['name'] for v in DEFAULT_VARIANTS]}")
+            raise SystemExit(f"No matching variants. Known: {[v['name'] for v in pool]}")
 
     rows: List[Dict[str, Any]] = []
     for v in variants:
@@ -178,6 +235,12 @@ def main(argv=None) -> None:
         "model",
         "joint_reward",
         "use_ube",
+        "u_gate_mode",
+        "adaptive_mc",
+        "selective_rank_corr",
+        "selective_over_rejection",
+        "selective_recall_bad",
+        "selective_risk_at_50",
     ]
     with csv_path.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=flat_keys, extrasaction="ignore")
@@ -187,14 +250,16 @@ def main(argv=None) -> None:
 
     # console summary
     print("\n========== ABLATION SUMMARY ==========")
-    print(f"{'variant':32s} {'seed':>4s} {'return':>10s} {'s_mse':>10s} {'r_mse':>10s} {'u_corr':>8s}")
+    print(
+        f"{'variant':16s} {'seed':>4s} {'return':>9s} {'over_rej':>9s} {'recall':>8s} {'rkcorr':>7s}"
+    )
     for r in rows:
         print(
-            f"{r['name']:32s} {r['seed']:4d} "
-            f"{float(r['final_return'] or 0):10.2f} "
-            f"{float(r.get('next_state_mse') or float('nan')):10.4f} "
-            f"{float(r.get('reward_mse') or float('nan')):10.4f} "
-            f"{float(r.get('u_corr') or float('nan')):8.3f}"
+            f"{r['name']:16s} {r['seed']:4d} "
+            f"{float(r['final_return'] or 0):9.2f} "
+            f"{float(r.get('selective_over_rejection') or float('nan')):9.3f} "
+            f"{float(r.get('selective_recall_bad') or float('nan')):8.3f} "
+            f"{float(r.get('selective_rank_corr') or float('nan')):7.3f}"
         )
     print(f"\nWrote {json_path}")
     print(f"Wrote {csv_path}")

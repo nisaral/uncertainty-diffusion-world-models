@@ -26,6 +26,8 @@ python -m udwm.scripts.run_multiseed --config configs/smoke_train.yaml --seeds 0
 
 # Ablations
 python -m udwm.scripts.run_ablations --config configs/ablation_fast.yaml --steps 2000
+# A×B factorial (off / U-gate / adaptive-MC / both) + selective over-rejection
+python -m udwm.scripts.run_ablations --suite ab --config configs/ab_novel.yaml --steps 2000
 
 # Consistency distill (1-step student)
 python -m udwm.scripts.train_mbpo --config configs/consistency_distill.yaml
