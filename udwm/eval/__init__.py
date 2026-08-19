@@ -3,6 +3,7 @@ from .metrics import (
     evaluate_uncertainty_calibration,
     evaluate_world_model_accuracy,
     throughput_benchmark,
+    evaluate_distillation_uncertainty,
 )
 from .selective import collect_score_and_error, selective_report
 
@@ -11,6 +12,7 @@ __all__ = [
     "evaluate_world_model_accuracy",
     "evaluate_uncertainty_calibration",
     "throughput_benchmark",
+    "evaluate_distillation_uncertainty",
     "collect_score_and_error",
     "selective_report",
 ]

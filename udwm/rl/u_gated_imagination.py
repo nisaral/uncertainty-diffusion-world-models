@@ -34,6 +34,7 @@ def u_gated_rollout(
     weight_beta: float = 1.0,
     min_weight: float = 0.05,
     use_sqrt: bool = True,
+    score_fn=None,
 ) -> Dict[str, torch.Tensor]:
     """Roll out up to ``horizon`` steps with U-based stop/weight.
 
@@ -65,7 +66,7 @@ def u_gated_rollout(
 
     for t in range(horizon):
         a = policy_fn(o)
-        u = u_net(o, a)
+        u = score_fn(o, a) if score_fn is not None else u_net(o, a)
         score = torch.sqrt(u + 1e-8) if use_sqrt else u
 
         if pending_threshold is None and mode in ("stop", "both"):

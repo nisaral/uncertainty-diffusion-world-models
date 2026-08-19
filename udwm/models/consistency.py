@@ -15,7 +15,7 @@ not a full Song et al. continuous-time consistency model.
 
 from __future__ import annotations
 
-from typing import Optional, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -122,16 +122,104 @@ def distill_loss(
     return F.mse_loss(x0_student, x0_teacher.detach())
 
 
+def uncertainty_preserving_distill_loss(
+    student: ConsistencyStudent,
+    teacher: DiffusionDynamicsEnsemble,
+    obs: torch.Tensor,
+    actions: torch.Tensor,
+    next_obs: torch.Tensor,
+    rewards: Optional[torch.Tensor] = None,
+    mean_weight: float = 1.0,
+    geometry_weight: float = 1.0,
+    pairwise_weight: float = 1.0,
+) -> Dict[str, torch.Tensor]:
+    """Distil samples while preserving ensemble epistemic geometry.
+
+    All members see the same corrupted data sample. Besides member-wise teacher
+    matching, the loss preserves (a) the ensemble mean, (b) centered member
+    deviations, and (c) pairwise squared distances. These are the empirical
+    objects that determine one-step ensemble variance and, after a Lipschitz
+    value map, the local UBE disagreement term.
+    """
+    teacher.eval()
+    b = obs.shape[0]
+    device = obs.device
+    delta = next_obs - obs
+    x0_data = teacher._pack_x(delta, rewards if teacher.joint_reward else None)
+    t_idx = torch.randint(0, teacher.diffusion_steps, (b,), device=device)
+    noise = torch.randn_like(x0_data)
+    sqrt_ab = teacher.schedule.sqrt_alpha_bar[t_idx].unsqueeze(-1)
+    sqrt_om = teacher.schedule.sqrt_one_minus_alpha_bar[t_idx].unsqueeze(-1)
+    x_t = sqrt_ab * x0_data + sqrt_om * noise
+    t_scaled = (t_idx.float() + 1.0) / teacher.diffusion_steps
+
+    teacher_x0, student_x0 = [], []
+    for i in range(student.ensemble_size):
+        with torch.no_grad():
+            eps = teacher.members[i](x_t, t_scaled, obs, actions)
+            ab = teacher.schedule.alpha_bar[t_idx].unsqueeze(-1)
+            target = (x_t - torch.sqrt(1.0 - ab) * eps) / (torch.sqrt(ab) + 1e-8)
+        teacher_x0.append(target.detach())
+        student_x0.append(student.forward_member(i, x_t, t_scaled, obs, actions))
+
+    t_all = torch.stack(teacher_x0, dim=0)  # [N,B,D]
+    s_all = torch.stack(student_x0, dim=0)
+    member = F.mse_loss(s_all, t_all)
+    mean = F.mse_loss(s_all.mean(dim=0), t_all.mean(dim=0))
+    t_center = t_all - t_all.mean(dim=0, keepdim=True)
+    s_center = s_all - s_all.mean(dim=0, keepdim=True)
+    geometry = F.mse_loss(s_center, t_center)
+
+    t_diff = t_all[:, None] - t_all[None, :]
+    s_diff = s_all[:, None] - s_all[None, :]
+    t_pair = t_diff.pow(2).mean(dim=-1)
+    s_pair = s_diff.pow(2).mean(dim=-1)
+    pairwise = F.mse_loss(s_pair, t_pair)
+    total = (
+        member
+        + float(mean_weight) * mean
+        + float(geometry_weight) * geometry
+        + float(pairwise_weight) * pairwise
+    )
+    return {
+        "total": total,
+        "member": member,
+        "mean": mean,
+        "geometry": geometry,
+        "pairwise": pairwise,
+    }
+
+
 class DistilledWorldModel(nn.Module):
     """Wraps a frozen teacher diffusion ensemble + trainable consistency student."""
 
-    def __init__(self, teacher: DiffusionDynamicsEnsemble, student: ConsistencyStudent) -> None:
+    def __init__(
+        self,
+        teacher: DiffusionDynamicsEnsemble,
+        student: ConsistencyStudent,
+        preserve_uncertainty: bool = False,
+        mean_weight: float = 1.0,
+        geometry_weight: float = 1.0,
+        pairwise_weight: float = 1.0,
+    ) -> None:
         super().__init__()
         self.teacher = teacher
         self.student = student
         self.model_type = "diffusion"
         self.joint_reward = teacher.joint_reward
         self.reward_model = None  # rewards via joint channel or external
+        self.preserve_uncertainty = bool(preserve_uncertainty)
+        self.mean_weight = float(mean_weight)
+        self.geometry_weight = float(geometry_weight)
+        self.pairwise_weight = float(pairwise_weight)
+        self.teacher_frozen = False
+
+    def freeze_teacher(self) -> None:
+        """Freeze teacher parameters for a genuine two-stage distillation run."""
+        self.teacher_frozen = True
+        self.teacher.eval()
+        for parameter in self.teacher.parameters():
+            parameter.requires_grad_(False)
 
     @property
     def ensemble_size(self) -> int:
@@ -143,15 +231,32 @@ class DistilledWorldModel(nn.Module):
         return _StudentDynamicsAdapter(self.teacher, self.student)
 
     def train_loss(self, obs, actions, next_obs, rewards, dones):
-        # Keep teacher sharp on data + distill student
-        t_loss = self.teacher.nll_loss(obs, actions, next_obs, rewards, dones)
-        s_loss = distill_loss(self.student, self.teacher, obs, actions, next_obs, rewards)
+        # Pretraining may update the teacher; after freeze_teacher(), only the
+        # student is optimized and the teacher is a fixed target distribution.
+        if self.teacher_frozen:
+            t_loss = torch.zeros((), device=obs.device)
+        else:
+            t_loss = self.teacher.nll_loss(obs, actions, next_obs, rewards, dones)
+        if self.preserve_uncertainty:
+            parts = uncertainty_preserving_distill_loss(
+                self.student, self.teacher, obs, actions, next_obs, rewards,
+                mean_weight=self.mean_weight,
+                geometry_weight=self.geometry_weight,
+                pairwise_weight=self.pairwise_weight,
+            )
+            s_loss = parts["total"]
+        else:
+            parts = None
+            s_loss = distill_loss(self.student, self.teacher, obs, actions, next_obs, rewards)
         total = t_loss + s_loss
-        return {
+        out = {
             "total": total,
             "dynamics": t_loss.detach(),
             "reward": s_loss.detach(),  # reuse slot as distill loss for logging
         }
+        if parts is not None:
+            out.update({f"distill_{k}": v.detach() for k, v in parts.items() if k != "total"})
+        return out
 
     @torch.no_grad()
     def rollout(self, obs, policy_action_fn, horizon: int, member=None):

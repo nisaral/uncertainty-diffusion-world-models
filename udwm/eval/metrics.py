@@ -1,19 +1,88 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
-import gymnasium as gym
 import numpy as np
 import torch
 
 from udwm.uncertainty.calibration import reliability_summary
+from udwm.uncertainty.mc_ube import MCUBELocalRewards
+
+
+def _rankdata(x: np.ndarray) -> np.ndarray:
+    order = np.argsort(x, kind="mergesort")
+    ranks = np.empty_like(order, dtype=np.float64)
+    ranks[order] = np.arange(order.size, dtype=np.float64)
+    return ranks
+
+
+def _rank_corr(x: np.ndarray, y: np.ndarray) -> float:
+    if x.size < 2 or np.std(x) < 1e-12 or np.std(y) < 1e-12:
+        return 0.0
+    return float(np.corrcoef(_rankdata(x), _rankdata(y))[0, 1])
+
+
+@torch.no_grad()
+def evaluate_distillation_uncertainty(
+    distilled_world_model,
+    q_fn,
+    policy_fn,
+    buffer,
+    batch_size: int = 256,
+    n_batches: int = 3,
+    m_samples: int = 8,
+) -> Dict[str, float]:
+    """Compare teacher and student local UBE quantities on identical states.
+
+    This is the primary evaluation for uncertainty-preserving distillation. It
+    deliberately uses the same critic/policy and estimator for both models, so
+    the reported gap is about the sampler/student rather than a changed UBE
+    implementation. ``distilled_world_model`` must be a DistilledWorldModel.
+    """
+    if not hasattr(distilled_world_model, "teacher"):
+        raise TypeError("expected DistilledWorldModel with a teacher attribute")
+    if len(buffer) == 0:
+        return {"n": 0.0}
+    batch_size = min(int(batch_size), len(buffer))
+    teacher_proxy = SimpleNamespace(
+        dynamics=distilled_world_model.teacher,
+        model_type="diffusion",
+        ensemble_size=distilled_world_model.teacher.ensemble_size,
+    )
+    student_proxy = distilled_world_model
+    est = MCUBELocalRewards(u_min=-1e9, m_samples=max(2, int(m_samples)), debias=True)
+    teacher_u, student_u, teacher_w, student_w = [], [], [], []
+    for _ in range(int(n_batches)):
+        batch = buffer.sample(batch_size)
+        obs, act = batch["obs"], batch["actions"]
+        t = est.estimate(teacher_proxy, q_fn, policy_fn, obs, act)
+        s = est.estimate(student_proxy, q_fn, policy_fn, obs, act)
+        teacher_u.append(t["u"].reshape(-1).cpu().numpy())
+        student_u.append(s["u"].reshape(-1).cpu().numpy())
+        teacher_w.append(t["w"].reshape(-1).cpu().numpy())
+        student_w.append(s["w"].reshape(-1).cpu().numpy())
+
+    tu, su = np.concatenate(teacher_u), np.concatenate(student_u)
+    tw, sw = np.concatenate(teacher_w), np.concatenate(student_w)
+    return {
+        "n": float(tu.size),
+        "u_rank_corr": _rank_corr(tu, su),
+        "w_rank_corr": _rank_corr(tw, sw),
+        "u_mae": float(np.mean(np.abs(tu - su))),
+        "w_mae": float(np.mean(np.abs(tw - sw))),
+        "u_rmse": float(np.sqrt(np.mean((tu - su) ** 2))),
+        "w_rmse": float(np.sqrt(np.mean((tw - sw) ** 2))),
+        "teacher_u_mean": float(np.mean(tu)),
+        "student_u_mean": float(np.mean(su)),
+    }
 
 
 @torch.no_grad()
 def evaluate_policy_return(
     agent,
-    env: gym.Env,
+    env,
     n_episodes: int = 10,
     seed: int = 0,
     action_low: Optional[np.ndarray] = None,

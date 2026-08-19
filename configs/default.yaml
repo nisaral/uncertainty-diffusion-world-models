@@ -27,6 +27,8 @@ reward_term:
 
 # Novelty A: U-gated imagination (off by default for baseline)
 u_gate:
+  score: ube              # ube | one_step_state
+  one_step_m_samples: 4   # implicit-model mean estimate for baseline score
   mode: off               # off | stop | weight | both
   enable_after_steps: 0   # delay gating until U-net has trained
   stop_threshold: null
@@ -48,6 +50,7 @@ ube:
     m_min: 2
     m_max: 12
     m_probe: 2
+    sample_split: true
     refine_frac: 0.5
     w_refine_percentile: 0.5
     k_min: null

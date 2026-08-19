@@ -120,6 +120,11 @@ class WorldModel(nn.Module):
         reward_hidden=(128, 128),
         joint_with_diffusion: bool = False,
         use_consistency_distill: bool = False,
+        preserve_distilled_uncertainty: bool = False,
+        distill_mean_weight: float = 1.0,
+        distill_geometry_weight: float = 1.0,
+        distill_pairwise_weight: float = 1.0,
+        freeze_teacher: bool = False,
     ):
         if model_type == "gaussian":
             dyn = GaussianEnsemble(obs_dim, action_dim, ensemble_size, hidden_dims)
@@ -141,7 +146,17 @@ class WorldModel(nn.Module):
             student = ConsistencyStudent(
                 x_dim, obs_dim, action_dim, ensemble_size, hidden_dims
             )
-            return DistilledWorldModel(dyn, student)
+            model = DistilledWorldModel(
+                dyn,
+                student,
+                preserve_uncertainty=preserve_distilled_uncertainty,
+                mean_weight=distill_mean_weight,
+                geometry_weight=distill_geometry_weight,
+                pairwise_weight=distill_pairwise_weight,
+            )
+            if freeze_teacher:
+                model.freeze_teacher()
+            return model
 
         if joint_with_diffusion:
             return WorldModel(dyn, reward_model=None, model_type="diffusion", joint_reward=True)

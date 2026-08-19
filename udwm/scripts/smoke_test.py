@@ -105,7 +105,28 @@ def main() -> None:
         roll = dwm.rollout(obs[:4], policy_fn, horizon=2)
     print(f"  rollout obs shape={tuple(roll['obs'].shape)}")
 
-    print("== Joint reward diffusion (Gap 1 path) ==")
+    print("== Distillation (uncertainty-preserving student) ==")
+    cwm = WorldModel.build(
+        "diffusion",
+        obs_dim,
+        action_dim,
+        ensemble_size=2,
+        hidden_dims=(64, 64),
+        diffusion_steps=5,
+        sample_steps=2,
+        use_consistency_distill=True,
+        preserve_distilled_uncertainty=True,
+    ).to(device)
+    cwm.freeze_teacher()
+    parts = cwm.train_loss(obs, act, next_obs, rew, done)
+    parts["total"].backward()
+    print(
+        "  distill member/mean/geometry/pairwise: "
+        f"{float(parts['distill_member']):.4f} / {float(parts['distill_mean']):.4f} / "
+        f"{float(parts['distill_geometry']):.4f} / {float(parts['distill_pairwise']):.4f}"
+    )
+
+    print("== Joint reward diffusion (optional path) ==")
     jwm = WorldModel.build(
         "diffusion",
         obs_dim,

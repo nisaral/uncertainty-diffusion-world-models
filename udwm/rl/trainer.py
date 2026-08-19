@@ -19,6 +19,7 @@ from udwm.models.world_model import WorldModel
 from udwm.rl.sac import SACAgent
 from udwm.rl.u_gated_imagination import u_gated_rollout
 from udwm.uncertainty.adaptive_mc import AdaptiveMCUBELocalRewards
+from udwm.uncertainty.baselines import one_step_state_disagreement
 from udwm.uncertainty.mc_ube import MCUBELocalRewards, UNetwork, ube_loss
 from udwm.utils.torch_utils import get_device
 
@@ -57,6 +58,11 @@ class MBPOTrainer:
             reward_hidden=tuple(rcfg.get("hidden_dims", [128, 128])),
             joint_with_diffusion=bool(rcfg.get("joint_with_diffusion", False)),
             use_consistency_distill=bool(mcfg.get("use_consistency_distill", False)),
+            preserve_distilled_uncertainty=bool(mcfg.get("preserve_distilled_uncertainty", False)),
+            distill_mean_weight=float(mcfg.get("distill_mean_weight", 1.0)),
+            distill_geometry_weight=float(mcfg.get("distill_geometry_weight", 1.0)),
+            distill_pairwise_weight=float(mcfg.get("distill_pairwise_weight", 1.0)),
+            freeze_teacher=bool(mcfg.get("freeze_teacher", False)),
         ).to(self.device)
 
         self.wm_opt = torch.optim.Adam(self.world_model.parameters(), lr=1e-3)
@@ -99,6 +105,7 @@ class MBPOTrainer:
                 k_min=acfg_mc.get("k_min", mcfg.get("sample_steps")),
                 k_max=acfg_mc.get("k_max"),
                 enabled=True,
+                sample_split=bool(acfg_mc.get("sample_split", True)),
             )
         else:
             self.mc_ube = MCUBELocalRewards(
@@ -152,6 +159,7 @@ class MBPOTrainer:
         epochs = int(self.mbcfg["num_model_epochs"])
         bs = int(self.mbcfg["model_batch_size"])
         losses = []
+        last_out: Dict[str, torch.Tensor] = {}
         for _ in range(epochs):
             batch = self.real_buffer.sample(bs)
             out = self.world_model.train_loss(
@@ -166,7 +174,12 @@ class MBPOTrainer:
             torch.nn.utils.clip_grad_norm_(self.world_model.parameters(), 10.0)
             self.wm_opt.step()
             losses.append(float(out["total"].item()))
-        return {"wm_loss": float(np.mean(losses))}
+            last_out = out
+        info = {"wm_loss": float(np.mean(losses))}
+        for key in ("distill_member", "distill_mean", "distill_geometry", "distill_pairwise"):
+            if key in last_out:
+                info[key] = float(last_out[key].item())
+        return info
 
     def _imagine(self) -> Dict[str, float]:
         if len(self.real_buffer) < self.mbcfg["model_batch_size"]:
@@ -185,6 +198,15 @@ class MBPOTrainer:
         if self.total_steps < self.u_gate_enable_after:
             gate_mode = "off"
         with torch.no_grad():
+            score_source = str(self.u_gate_cfg.get("score", "ube")).lower()
+            score_fn = None
+            if score_source == "one_step_state":
+                score_fn = lambda o, a: one_step_state_disagreement(
+                    self.world_model,
+                    o,
+                    a,
+                    m_samples=int(self.u_gate_cfg.get("one_step_m_samples", 4)),
+                )
             roll = u_gated_rollout(
                 self.world_model,
                 policy_fn,
@@ -197,6 +219,7 @@ class MBPOTrainer:
                 weight_beta=float(self.u_gate_cfg.get("weight_beta", 1.0)),
                 min_weight=float(self.u_gate_cfg.get("min_weight", 0.05)),
                 use_sqrt=bool(self.u_gate_cfg.get("use_sqrt", True)),
+                score_fn=score_fn,
             )
 
         b, hh = roll["obs"].shape[0], roll["obs"].shape[1]

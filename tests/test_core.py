@@ -357,6 +357,22 @@ def test_u_gated_rollout_and_adaptive_mc():
     assert out["u"].shape == (8, 1)
     assert "m_mean" in out
     assert "refine_frac_used" in out
+    assert out["sample_split"].item() == 1.0
+
+
+def test_one_step_disagreement_baseline():
+    from udwm.uncertainty.baselines import one_step_state_disagreement
+
+    for model_type in ("gaussian", "diffusion"):
+        wm = WorldModel.build(
+            model_type, 3, 1, ensemble_size=2, hidden_dims=(32, 32),
+            diffusion_steps=4, sample_steps=2,
+        )
+        obs, act = torch.randn(5, 3), torch.randn(5, 1)
+        score = one_step_state_disagreement(wm, obs, act, m_samples=2)
+        assert score.shape == (5, 1)
+        assert torch.isfinite(score).all()
+        assert (score >= 0).all()
 
 
 def test_consistency_distill_build():
@@ -382,3 +398,112 @@ def test_consistency_distill_build():
     loss.backward()
     assert torch.isfinite(loss)
 
+
+def test_uncertainty_preserving_distill_loss():
+    wm = WorldModel.build(
+        "diffusion", 3, 1, ensemble_size=3, hidden_dims=(32, 32),
+        diffusion_steps=4, sample_steps=2, use_consistency_distill=True,
+        preserve_distilled_uncertainty=True,
+    )
+    obs, act = torch.randn(6, 3), torch.randn(6, 1)
+    nxt, rew, done = obs + 0.05 * torch.randn_like(obs), torch.randn(6, 1), torch.zeros(6, 1)
+    out = wm.train_loss(obs, act, nxt, rew, done)
+    for key in ("distill_member", "distill_mean", "distill_geometry", "distill_pairwise"):
+        assert key in out
+        assert torch.isfinite(out[key])
+    out["total"].backward()
+
+
+def test_distillation_uncertainty_metrics():
+    from udwm.eval.metrics import evaluate_distillation_uncertainty
+    from udwm.data.replay_buffer import ReplayBuffer
+
+    wm = WorldModel.build(
+        "diffusion", 3, 1, ensemble_size=2, hidden_dims=(16, 16),
+        diffusion_steps=4, sample_steps=2, use_consistency_distill=True,
+        preserve_distilled_uncertainty=True,
+    )
+    buf = ReplayBuffer(64, 3, 1, torch.device("cpu"))
+    for _ in range(24):
+        o = np.random.randn(3).astype(np.float32)
+        a = np.random.randn(1).astype(np.float32)
+        buf.add(o, a, 0.0, o + 0.01 * np.random.randn(3).astype(np.float32), 0.0)
+    q = torch.nn.Sequential(torch.nn.Linear(4, 16), torch.nn.Tanh(), torch.nn.Linear(16, 1))
+
+    def q_fn(o, a):
+        return q(torch.cat([o, a], dim=-1))
+
+    def policy_fn(o):
+        return torch.zeros(o.shape[0], 1)
+
+    report = evaluate_distillation_uncertainty(wm, q_fn, policy_fn, buf, batch_size=8, n_batches=1, m_samples=2)
+    assert report["n"] > 0
+    assert -1.0 <= report["u_rank_corr"] <= 1.0
+    assert np.isfinite(report["u_rmse"])
+
+
+def test_distilled_teacher_can_be_frozen_for_matched_stage_training():
+    wm = WorldModel.build(
+        "diffusion", 3, 1, ensemble_size=2, hidden_dims=(16, 16),
+        diffusion_steps=4, sample_steps=2, use_consistency_distill=True,
+        preserve_distilled_uncertainty=True,
+    )
+    wm.freeze_teacher()
+    assert all(not p.requires_grad for p in wm.teacher.parameters())
+    obs, act = torch.randn(5, 3), torch.randn(5, 1)
+    nxt, rew, done = obs + 0.05 * torch.randn_like(obs), torch.randn(5, 1), torch.zeros(5, 1)
+    out = wm.train_loss(obs, act, nxt, rew, done)
+    out["total"].backward()
+    assert all(p.grad is None for p in wm.teacher.parameters())
+    assert any(p.grad is not None for p in wm.student.parameters())
+
+
+def test_teacher_student_variance_bound_algebra():
+    # Directly validates the perturbation inequality used in the proof note.
+    mu = torch.tensor([0.2, -0.4, 0.7, 1.1])
+    delta = torch.tensor([0.03, -0.02, 0.01, 0.04])
+    mu_q = mu + delta
+    w_p = ((mu - mu.mean()) ** 2).mean()
+    w_q = ((mu_q - mu_q.mean()) ** 2).mean()
+    d = delta - delta.mean()
+    D = torch.sqrt((d * d).mean())
+    rhs = 2.0 * torch.sqrt(w_p) * D + D * D
+    assert abs(float(w_q - w_p)) <= float(rhs) + 1e-7
+
+
+def test_distillation_ablation_runner_imports():
+    import udwm.scripts.run_distillation_ablation as runner
+
+    assert callable(runner.main)
+    assert callable(runner._make_cfg)
+
+
+def test_distillation_ablation_smoke_executes():
+    import udwm.scripts.run_distillation_ablation as runner
+    from udwm.utils.config import load_config
+
+    cfg = load_config(str(ROOT / "configs" / "consistency_distill.yaml"))
+    row = runner._run(
+        cfg,
+        variant="geometry",
+        seed=0,
+        collect_steps=40,
+        teacher_epochs=1,
+        student_epochs=1,
+        m=2,
+    )
+    assert row["teacher_frozen"] is True
+    assert row["n"] > 0
+    assert np.isfinite(row["u_rmse"])
+
+
+def test_distillation_ablation_summary_is_honest():
+    from udwm.scripts.run_distillation_ablation import summarize
+
+    rows = [
+        {"variant": "ordinary", "seed": 0, "u_rank_corr": 0.2, "w_rank_corr": 0.2, "u_rmse": 1.0},
+        {"variant": "geometry", "seed": 0, "u_rank_corr": 0.3, "w_rank_corr": 0.4, "u_rmse": 0.8},
+    ]
+    out = summarize(rows)
+    assert out["verdict"] == "supports_preservation_hypothesis"
+    assert "novelty" in out["interpretation"]

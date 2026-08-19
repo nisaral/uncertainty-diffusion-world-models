@@ -44,6 +44,7 @@ ube:
     m_min: 2
     m_max: 10
     m_probe: 2
+    sample_split: true
     refine_frac: 0.4
     w_refine_percentile: 0.6
     k_min: 2

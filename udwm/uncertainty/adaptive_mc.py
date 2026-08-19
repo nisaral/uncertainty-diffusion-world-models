@@ -34,6 +34,7 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
         k_max: Optional[int] = None,
         enabled: bool = True,
         gaussian_mean_blend: float = 0.0,
+        sample_split: bool = True,
     ) -> None:
         super().__init__(u_min=u_min, m_samples=m_max)
         # Floor of 2, not 1: at M=1 the within-member variance g is unidentifiable,
@@ -51,6 +52,10 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
         self.k_min = k_min
         self.k_max = k_max
         self.adaptive_enabled = bool(enabled)
+        # Selection and reporting use disjoint samples by default. Reusing the
+        # probe makes the reported score conditionally biased after top-k
+        # selection (winner's curse), even when the finite-M debias is exact.
+        self.sample_split = bool(sample_split)
 
     @torch.no_grad()
     def _member_stats(
@@ -169,6 +174,7 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
             world_model, q_fn, policy_fn, obs, actions, self.m_probe, k_probe, idx=None
         )
         u, w, g = self._wg_at_m(means_p, vars_p, self.m_probe, noise_scale)
+        reported_means = means_p.clone()
 
         # who to refine: top uncertainty by w
         w_flat = w.reshape(b)
@@ -202,18 +208,42 @@ class AdaptiveMCUBELocalRewards(MCUBELocalRewards):
             u = u.clone()
             w = w.clone()
             g = g.clone()
+            reported_means = reported_means.clone()
             u[refine_idx] = u_r
             w[refine_idx] = w_r
             g[refine_idx] = g_r
+            reported_means[:, refine_idx] = means_r
             m_used[refine_idx] = float(extra)
+
+        # Report an independent probe estimate for states that were not
+        # refined. The probe above is reserved for selection. This split is
+        # essential when adaptive scores are used for calibration or theory;
+        # callers can disable it only for a deliberately cheap, biased mode.
+        if self.sample_split:
+            report_mask = ~refine_mask
+            report_idx = report_mask.nonzero(as_tuple=False).squeeze(-1)
+            if report_idx.numel() > 0:
+                means_s, vars_s = self._member_stats(
+                    world_model, q_fn, policy_fn, obs, actions,
+                    self.m_probe, k_probe, idx=report_idx,
+                )
+                u_s, w_s, g_s = self._wg_at_m(
+                    means_s, vars_s, self.m_probe, noise_scale
+                )
+                u[report_idx] = u_s
+                w[report_idx] = w_s
+                g[report_idx] = g_s
+                reported_means[:, report_idx] = means_s
+                m_used[report_idx] = float(self.m_probe)
 
         return {
             "u": u,
             "w": w,
             "g": g,
-            "member_means": means_p,
+            "member_means": reported_means,
             "m_mean": m_used.mean(),
             "m_used": m_used,
             "refine_frac_used": refine_mask.float().mean(),
             "w_thresh": thresh.detach(),
+            "sample_split": torch.tensor(float(self.sample_split), device=device),
         }

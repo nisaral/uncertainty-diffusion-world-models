@@ -1,11 +1,37 @@
-# Novelty landscape — what already exists vs what is still ours
+# Novelty landscape — what already exists vs what is still a question
 
-**Date:** 2026-08. Re-check arXiv every 3–4 weeks.  
-**Purpose:** Do not overclaim. Faculty will know MACURA.
+**Date:** 2026-08-19. Re-check arXiv every 3–4 weeks.  
+**Purpose:** Do not overclaim. Faculty will know MACURA and distillation.
 
 ---
 
-## Pattern that looks like us (does **not** refute, but shrinks A)
+## Active question (the only thing we pitch)
+
+Does **distillation** of a diffusion world-model ensemble preserve **decision-relevant
+epistemic disagreement** (local UBE \(u,w\)), or only average next-state accuracy,
+at matched NFE?
+
+This is an empirical / estimator question. It is **not** “we invented gated
+imagination” and **not** “we invented UBE.”
+
+Related work that *touches* this without answering it:
+
+| Paper / line | What it does | What it does not measure |
+|---|---|---|
+| Consistency models / progressive distillation | Match samples or scores in few steps | Teacher vs student **ensemble disagreement after a value map** |
+| WIMLE | Avoid diffusion because of latency | Uncertainty preservation of a distilled student |
+| DIAMOND | Strong diffusion WM for imagination | Multi-step epistemic value variance under distillation |
+| Luis UBE / QU-SAC | Exact recursion + Gaussian deep-RL estimators | Implicit diffusion members; distilled students |
+| Knowledge distillation + uncertainty (classification) | Sometimes match predictive entropy | Not MBRL imagination; not UBE local rewards |
+
+**What would refute the question as a contribution:** a paper that already
+compares teacher vs student UBE (or equivalent decision scores) for diffusion
+WM distillation under matched compute. As of the last search, that comparison
+was not the stated object of the WM distillation papers we read.
+
+---
+
+## Pattern that looks like “A” (does **not** refute, but shrinks gated imagination)
 
 Several papers already **stop or shorten model rollouts when the model looks uncertain**:
 
@@ -27,22 +53,22 @@ Several papers already **stop or shorten model rollouts when the model looks unc
 
 ---
 
-## What would actually refute us
+## What would actually refute the distillation claim
 
 | If this exists | Effect |
 |---|---|
-| Paper that does **exact/MC UBE local rewards for diffusion ensembles** + uses \(U\) to gate imagination | Direct collision — read it and pivot (estimator theory or selective metrics only) |
-| Proof that **ensemble-of-diffusions is not a valid \(\Phi_t\)** so UBE equality is meaningless | Weakens Claim A; we already treat ensemble as approximation (same as Luis deep RL) |
-| Result that **few-step / distilled samples make \(\hat u\) so biased** that \(U\) ranks worse than random | Threatens A+B empirically — we must measure rank-corr; if it fails, say so |
-| MACURA-style method **strictly dominates** U-gate when both use the same diffusion ensemble | Then A is only a reimplementation; keep B + selective + diffusion-MC-UBE |
+| Paper that already reports teacher vs student UBE / ensemble-disagreement rankings for distilled diffusion world models at matched NFE | Direct collision — cite it and shrink to a tighter estimator or control comparison |
+| Result that **ordinary** distillation already preserves \(u,w\) rankings | Geometry loss is unnecessary; report the negative |
+| Result that geometry preserves rankings only by destroying next-state accuracy | Hypothesis fails as a *useful* method |
+| Proof that an ensemble of independently distilled members is not a valid \(\Phi_t\) | Same caveat as Luis deep RL; state it, do not hide it |
 
-**As of this search:** no mainstream paper titled or abstract-matched “UBE + diffusion world model + MC local rewards.” That hole still looks open. Adaptive *rollout length* is crowded; adaptive *MC sample budget for UBE* is not.
+Gated-imagination collision (MACURA + \(U\)) would refute a *different* pitch. We are not making that pitch.
 
 ---
 
 ## How to write the related-work paragraph
 
-> Uncertainty-aware rollouts are established: Kalweit & Boedecker restrict imagined data by uncertainty; Nguyen et al. and MACURA (Frauenknecht et al., 2024) adapt horizon using one-step model disagreement or error estimates. We do not claim to invent gated imagination. We change the **object that is gated**: multi-step posterior value variance under Luis’s UBE, with Monte Carlo local rewards because the dynamics are implicit (diffusion / distilled) rather than Gaussian. We additionally report selective-prediction diagnostics (risk–coverage, over-rejection) when \(\sqrt{U}\) is treated as a decision threshold, and an audit trail of refusals.
+> Distillation of generative world models is used to cut sampling cost. We ask a different question: after distillation, does the student still rank the same states as epistemically uncertain as the teacher, as measured by Monte Carlo local UBE rewards? Sample-matching losses need not preserve ensemble geometry after a value map. Uncertainty-aware rollouts (Kalweit & Boedecker; Nguyen et al.; MACURA) are related as *users* of a score, not as the contribution. We do not claim conformal coverage.
 
 ---
 
@@ -53,3 +79,7 @@ If MACURA-style **one-step ensemble variance** already gates as well as UBE \(\s
 - `gate_on_onestep_ensemble_var` vs `gate_on_UBE_U`
 
 That comparison is more important than another env. Not implemented yet — scheduled after the A×B factorial.
+
+Update 2026-08-19: the one-step state-disagreement score is now implemented as
+`udwm.uncertainty.baselines.one_step_state_disagreement` and can be selected with
+`u_gate.score: one_step_state`. The comparison is still unrun.
