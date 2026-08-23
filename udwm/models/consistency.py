@@ -15,7 +15,7 @@ not a full Song et al. continuous-time consistency model.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Callable, Dict, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -58,6 +58,7 @@ class ConsistencyStudent(nn.Module):
         obs: torch.Tensor,
         actions: torch.Tensor,
         member: Optional[int] = None,
+        x_T: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """One-NFE sample using student; falls back dimensions from teacher."""
         b = obs.shape[0]
@@ -70,7 +71,7 @@ class ConsistencyStudent(nn.Module):
                 mask = idxs == i
                 if not mask.any():
                     continue
-                x_t = torch.randn(int(mask.sum()), self.x_dim, device=device)
+                x_t = torch.randn(int(mask.sum()), self.x_dim, device=device) if x_T is None else x_T[mask]
                 t = torch.ones(int(mask.sum()), device=device)  # t=1 ⇒ pure noise end
                 x0 = self.forward_member(i, x_t, t, obs[mask], actions[mask])
                 delta, r = teacher._unpack_x(x0)
@@ -78,7 +79,9 @@ class ConsistencyStudent(nn.Module):
                 if r is not None and rewards is not None:
                     rewards[mask] = r
             return next_obs, rewards
-        x_t = torch.randn(b, self.x_dim, device=device)
+        x_t = torch.randn(b, self.x_dim, device=device) if x_T is None else x_T.to(device)
+        if x_t.shape != (b, self.x_dim):
+            raise ValueError(f"x_T must have shape {(b, self.x_dim)}, got {tuple(x_t.shape)}")
         t = torch.ones(b, device=device)
         x0 = self.forward_member(member, x_t, t, obs, actions)
         delta, r = teacher._unpack_x(x0)
@@ -190,6 +193,151 @@ def uncertainty_preserving_distill_loss(
     }
 
 
+def uncertainty_fidelity_guard(
+    teacher_values: torch.Tensor,
+    student_values: torch.Tensor,
+    min_corr: float = 0.0,
+    max_scale: float = 8.0,
+) -> torch.Tensor:
+    """Skip decision terms when student uncertainty is anti-aligned or exploded.
+
+    ``teacher_values`` / ``student_values`` are ensemble-stacked maps
+    ``[N, B, ...]``. The guard is a stop-gradient diagnostic: it does not
+    train the student to game the threshold.
+    """
+    t_var = teacher_values.detach().reshape(teacher_values.shape[0], -1).var(dim=0, unbiased=False)
+    s_var = student_values.detach().reshape(student_values.shape[0], -1).var(dim=0, unbiased=False)
+    t_c = t_var - t_var.mean()
+    s_c = s_var - s_var.mean()
+    corr = (s_c * t_c).sum() / (s_c.norm() * t_c.norm() + 1e-8)
+    scale = s_var.mean() / (t_var.mean() + 1e-8)
+    fire = (corr < float(min_corr)) | (scale > float(max_scale)) | (scale < 1.0 / max(float(max_scale), 1e-6))
+    return fire.to(dtype=teacher_values.dtype)
+
+
+def lagged_target_value_fn(critic_target, actor) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
+    """Value map from a lagged critic and a stop-gradient policy.
+
+    Gradients flow through next-states into the student, not into the critic
+    or actor. This is the correction for the online-critic collapse: the
+    decision map is slow-moving and is not jointly optimized with the student.
+    """
+
+    def value_fn(states: torch.Tensor, _actions: torch.Tensor) -> torch.Tensor:
+        flat = states.reshape(-1, states.shape[-1])
+        with torch.no_grad():
+            actions = actor.deterministic(flat)
+        q = critic_target.min_q(flat, actions)
+        return q.reshape(*states.shape[:-1], 1)
+
+    return value_fn
+
+
+def decision_preserving_distill_loss(
+    student: ConsistencyStudent,
+    teacher: DiffusionDynamicsEnsemble,
+    obs: torch.Tensor,
+    actions: torch.Tensor,
+    next_obs: torch.Tensor,
+    value_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    rewards: Optional[torch.Tensor] = None,
+    value_weight: float = 1.0,
+    variance_weight: float = 1.0,
+    variance_shape_weight: float = 0.0,
+    state_geometry_weight: float = 0.0,
+    state_pairwise_weight: float = 0.0,
+    normalize_values: bool = False,
+    guard_enabled: bool = False,
+    guard_min_corr: float = 0.0,
+    guard_max_scale: float = 8.0,
+) -> Dict[str, torch.Tensor]:
+    """Match member outputs and their downstream decision-value disagreement.
+
+    Unlike state-space geometry matching, this objective applies the supplied
+    value map before matching centered ensemble values and their variance. It
+    therefore targets the actual local-UBE object when Euclidean state errors
+    are poorly aligned with decision consequences.
+    """
+    teacher.eval()
+    b = obs.shape[0]
+    delta = next_obs - obs
+    x0_data = teacher._pack_x(delta, rewards if teacher.joint_reward else None)
+    t_idx = torch.randint(0, teacher.diffusion_steps, (b,), device=obs.device)
+    noise = torch.randn_like(x0_data)
+    sqrt_ab = teacher.schedule.sqrt_alpha_bar[t_idx].unsqueeze(-1)
+    sqrt_om = teacher.schedule.sqrt_one_minus_alpha_bar[t_idx].unsqueeze(-1)
+    x_t = sqrt_ab * x0_data + sqrt_om * noise
+    t_scaled = (t_idx.float() + 1.0) / teacher.diffusion_steps
+
+    teacher_x0, student_x0 = [], []
+    for i in range(student.ensemble_size):
+        with torch.no_grad():
+            eps = teacher.members[i](x_t, t_scaled, obs, actions)
+            ab = teacher.schedule.alpha_bar[t_idx].unsqueeze(-1)
+            target = (x_t - torch.sqrt(1.0 - ab) * eps) / (torch.sqrt(ab) + 1e-8)
+        teacher_x0.append(target.detach())
+        student_x0.append(student.forward_member(i, x_t, t_scaled, obs, actions))
+
+    t_all = torch.stack(teacher_x0, dim=0)
+    s_all = torch.stack(student_x0, dim=0)
+    member = F.mse_loss(s_all, t_all)
+    t_state_center = t_all - t_all.mean(dim=0, keepdim=True)
+    s_state_center = s_all - s_all.mean(dim=0, keepdim=True)
+    state_geometry = F.mse_loss(s_state_center, t_state_center)
+    t_pair = (t_all[:, None] - t_all[None, :]).pow(2).mean(dim=-1)
+    s_pair = (s_all[:, None] - s_all[None, :]).pow(2).mean(dim=-1)
+    state_pairwise = F.mse_loss(s_pair, t_pair)
+    t_next = obs.unsqueeze(0) + teacher._unpack_x(t_all)[0]
+    s_next = obs.unsqueeze(0) + teacher._unpack_x(s_all)[0]
+    expanded_actions = actions.unsqueeze(0).expand(student.ensemble_size, -1, -1)
+    with torch.no_grad():
+        t_value = value_fn(t_next, expanded_actions)
+    s_value = value_fn(s_next, expanded_actions)
+    if normalize_values:
+        loc = t_value.mean().detach()
+        scale = t_value.std(unbiased=False).detach().clamp_min(1e-6)
+        t_used = (t_value - loc) / scale
+        s_used = (s_value - loc) / scale
+    else:
+        t_used, s_used = t_value, s_value
+    t_center = t_used - t_used.mean(dim=0, keepdim=True)
+    s_center = s_used - s_used.mean(dim=0, keepdim=True)
+    value_geometry = F.mse_loss(s_center, t_center)
+    s_variance = s_used.var(dim=0, unbiased=True)
+    t_variance = t_used.var(dim=0, unbiased=True)
+    value_variance = F.mse_loss(s_variance, t_variance)
+    # Standardization removes absolute scale, so this term targets the ordering
+    # and spatial shape of uncertainty across the minibatch.
+    t_shape = (t_variance - t_variance.mean()) / (t_variance.std(unbiased=False) + 1e-6)
+    s_shape = (s_variance - s_variance.mean()) / (s_variance.std(unbiased=False) + 1e-6)
+    variance_shape = F.mse_loss(s_shape, t_shape)
+    guard_fire = uncertainty_fidelity_guard(
+        t_value, s_value, min_corr=guard_min_corr, max_scale=guard_max_scale
+    )
+    if not guard_enabled:
+        guard_fire = guard_fire.new_zeros(())
+    decision_scale = 1.0 - guard_fire
+    total = (
+        member
+        + decision_scale * float(value_weight) * value_geometry
+        + decision_scale * float(variance_weight) * value_variance
+        + decision_scale * float(variance_shape_weight) * variance_shape
+        + float(state_geometry_weight) * state_geometry
+        + float(state_pairwise_weight) * state_pairwise
+    )
+    return {
+        "total": total,
+        "member": member,
+        "value_geometry": value_geometry,
+        "value_variance": value_variance,
+        "variance_shape": variance_shape,
+        "state_geometry": state_geometry,
+        "state_pairwise": state_pairwise,
+        "guard_fired": guard_fire.detach(),
+        "decision_scale": decision_scale.detach(),
+    }
+
+
 class DistilledWorldModel(nn.Module):
     """Wraps a frozen teacher diffusion ensemble + trainable consistency student."""
 
@@ -201,6 +349,14 @@ class DistilledWorldModel(nn.Module):
         mean_weight: float = 1.0,
         geometry_weight: float = 1.0,
         pairwise_weight: float = 1.0,
+        decision_weight: float = 0.0,
+        value_variance_weight: float = 0.0,
+        hybrid_state_weight: float = 0.0,
+        hybrid_pairwise_weight: float = 0.0,
+        normalize_values: bool = False,
+        guard_enabled: bool = False,
+        guard_min_corr: float = 0.0,
+        guard_max_scale: float = 8.0,
     ) -> None:
         super().__init__()
         self.teacher = teacher
@@ -212,6 +368,14 @@ class DistilledWorldModel(nn.Module):
         self.mean_weight = float(mean_weight)
         self.geometry_weight = float(geometry_weight)
         self.pairwise_weight = float(pairwise_weight)
+        self.decision_weight = float(decision_weight)
+        self.value_variance_weight = float(value_variance_weight)
+        self.hybrid_state_weight = float(hybrid_state_weight)
+        self.hybrid_pairwise_weight = float(hybrid_pairwise_weight)
+        self.normalize_values = bool(normalize_values)
+        self.guard_enabled = bool(guard_enabled)
+        self.guard_min_corr = float(guard_min_corr)
+        self.guard_max_scale = float(guard_max_scale)
         self.teacher_frozen = False
 
     def freeze_teacher(self) -> None:
@@ -230,14 +394,27 @@ class DistilledWorldModel(nn.Module):
         # For MC-UBE / rollouts: expose student sampling adapter
         return _StudentDynamicsAdapter(self.teacher, self.student)
 
-    def train_loss(self, obs, actions, next_obs, rewards, dones):
+    def train_loss(self, obs, actions, next_obs, rewards, dones, value_fn=None):
         # Pretraining may update the teacher; after freeze_teacher(), only the
         # student is optimized and the teacher is a fixed target distribution.
         if self.teacher_frozen:
             t_loss = torch.zeros((), device=obs.device)
         else:
             t_loss = self.teacher.nll_loss(obs, actions, next_obs, rewards, dones)
-        if self.preserve_uncertainty:
+        if self.decision_weight > 0.0 and value_fn is not None:
+            parts = decision_preserving_distill_loss(
+                self.student, self.teacher, obs, actions, next_obs, value_fn, rewards,
+                value_weight=self.decision_weight,
+                variance_weight=self.value_variance_weight,
+                state_geometry_weight=self.hybrid_state_weight,
+                state_pairwise_weight=self.hybrid_pairwise_weight,
+                normalize_values=self.normalize_values,
+                guard_enabled=self.guard_enabled,
+                guard_min_corr=self.guard_min_corr,
+                guard_max_scale=self.guard_max_scale,
+            )
+            s_loss = parts["total"]
+        elif self.preserve_uncertainty:
             parts = uncertainty_preserving_distill_loss(
                 self.student, self.teacher, obs, actions, next_obs, rewards,
                 mean_weight=self.mean_weight,
@@ -298,8 +475,8 @@ class _StudentDynamicsAdapter(nn.Module):
         self.sample_steps = 1
 
     @torch.no_grad()
-    def sample_next(self, obs, actions, member=None, deterministic=True, steps=None):
-        o2, r = self.student.sample_next(self.teacher, obs, actions, member=member)
+    def sample_next(self, obs, actions, member=None, deterministic=True, steps=None, x_T=None):
+        o2, r = self.student.sample_next(self.teacher, obs, actions, member=member, x_T=x_T)
         self.last_reward = r
         return o2
 
@@ -311,8 +488,11 @@ class _StudentDynamicsAdapter(nn.Module):
         return o2, r
 
     @torch.no_grad()
-    def sample_next_multi(self, obs, actions, m: int, member=None, steps=None):
-        samples = [self.sample_next(obs, actions, member=member) for _ in range(m)]
+    def sample_next_multi(self, obs, actions, m: int, member=None, steps=None, latents=None):
+        samples = [
+            self.sample_next(obs, actions, member=member, x_T=None if latents is None else latents[j])
+            for j in range(m)
+        ]
         return torch.stack(samples, 0)
 
     @torch.no_grad()

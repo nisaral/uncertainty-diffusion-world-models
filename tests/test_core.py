@@ -414,6 +414,80 @@ def test_uncertainty_preserving_distill_loss():
     out["total"].backward()
 
 
+def test_decision_preserving_distill_loss_backpropagates_only_student():
+    from udwm.models.consistency import decision_preserving_distill_loss
+    from udwm.models.world_model import WorldModel
+
+    wm = WorldModel.build(
+        "diffusion", obs_dim=2, action_dim=1, ensemble_size=3, hidden_dims=[16, 16],
+        student_hidden_dims=[8, 8], diffusion_steps=4, sample_steps=2,
+        use_consistency_distill=True,
+    )
+    wm.freeze_teacher()
+    obs = torch.randn(12, 2)
+    actions = torch.randn(12, 1)
+    next_obs = obs + 0.1 * torch.randn(12, 2)
+
+    def value_fn(states, acts):
+        return torch.tanh(states[..., :1] - states[..., 1:2]) - 0.1 * acts.square()
+
+    parts = decision_preserving_distill_loss(
+        wm.student, wm.teacher, obs, actions, next_obs, value_fn
+    )
+    assert set(parts) >= {
+        "total", "member", "value_geometry", "value_variance", "variance_shape",
+        "state_geometry", "state_pairwise", "guard_fired", "decision_scale",
+    }
+    parts["total"].backward()
+    assert any(p.grad is not None for p in wm.student.parameters())
+    assert all(p.grad is None for p in wm.teacher.parameters())
+
+
+def test_delayed_bimodal_env_is_seeded_and_markov_shaped():
+    from udwm.envs.registry import make_env, space_info
+
+    env_a = make_env("DelayedBimodal-v0", seed=7)
+    env_b = make_env("DelayedBimodal-v0", seed=7)
+    obs_a, _ = env_a.reset(seed=7)
+    obs_b, _ = env_b.reset(seed=7)
+    assert np.allclose(obs_a, obs_b)
+    info = space_info(env_a)
+    assert info["obs_dim"] == 5
+    assert info["action_dim"] == 1
+    for _ in range(8):
+        obs_a, reward, terminated, truncated, _ = env_a.step(np.array([0.25], dtype=np.float32))
+        assert obs_a.shape == (5,)
+        assert np.isfinite(reward)
+        if terminated or truncated:
+            break
+
+
+def test_two_stage_trainer_freezes_teacher_and_uses_student_optimizer():
+    from udwm.rl.trainer import MBPOTrainer
+    from udwm.utils.config import load_config
+
+    cfg = load_config(str(ROOT / "configs" / "delayed_bimodal_distill.yaml"))
+    cfg["model"]["distill_teacher_pretrain_updates"] = 1
+    cfg["mbpo"]["model_batch_size"] = 16
+    cfg["mbpo"]["num_model_epochs"] = 1
+    cfg["mbpo"]["warmup_steps"] = 0
+    trainer = MBPOTrainer(cfg)
+    for _ in range(20):
+        trainer._env_step()
+    initial = trainer._parameter_checksum(trainer.world_model.teacher)
+    pretrain_info = trainer._train_world_model()
+    trained = trainer._parameter_checksum(trainer.world_model.teacher)
+    assert pretrain_info["teacher_frozen"] == 0.0
+    assert pretrain_info["teacher_updates"] == 1.0
+    assert trained != initial
+    info = trainer._train_world_model()
+    assert info["teacher_frozen"] == 1.0
+    assert all(not p.requires_grad for p in trainer.world_model.teacher.parameters())
+    optimized = {id(p) for group in trainer.wm_opt.param_groups for p in group["params"]}
+    assert optimized == {id(p) for p in trainer.world_model.student.parameters()}
+    assert trainer._parameter_checksum(trainer.world_model.teacher) == trained
+
+
 def test_distillation_uncertainty_metrics():
     from udwm.eval.metrics import evaluate_distillation_uncertainty
     from udwm.data.replay_buffer import ReplayBuffer
@@ -484,7 +558,7 @@ def test_distillation_ablation_smoke_executes():
 
     cfg = load_config(str(ROOT / "configs" / "consistency_distill.yaml"))
     row = runner._run(
-        cfg,
+        {**cfg, "mbpo": {**cfg["mbpo"], "model_batch_size": 32}},
         variant="geometry",
         seed=0,
         collect_steps=40,
@@ -495,15 +569,120 @@ def test_distillation_ablation_smoke_executes():
     assert row["teacher_frozen"] is True
     assert row["n"] > 0
     assert np.isfinite(row["u_rmse"])
+    assert row["collect_steps"] >= 32
 
 
 def test_distillation_ablation_summary_is_honest():
     from udwm.scripts.run_distillation_ablation import summarize
 
     rows = [
-        {"variant": "ordinary", "seed": 0, "u_rank_corr": 0.2, "w_rank_corr": 0.2, "u_rmse": 1.0},
-        {"variant": "geometry", "seed": 0, "u_rank_corr": 0.3, "w_rank_corr": 0.4, "u_rmse": 0.8},
+        {"variant": "ordinary", "seed": 0, "u_rank_corr": 0.2, "w_rank_corr": 0.2, "u_rmse": 1.0, "teacher_state_checksum": 10.0},
+        {"variant": "geometry", "seed": 0, "u_rank_corr": 0.3, "w_rank_corr": 0.4, "u_rmse": 0.8, "teacher_state_checksum": 10.0},
     ]
     out = summarize(rows)
     assert out["verdict"] == "supports_preservation_hypothesis"
     assert "novelty" in out["interpretation"]
+    assert out["max_teacher_checksum_gap"] == 0.0
+
+
+def test_uncertainty_fidelity_guard_fires_on_anti_alignment_and_scale():
+    from udwm.models.consistency import uncertainty_fidelity_guard
+
+    aligned = torch.tensor([[[1.0], [2.0], [3.0]], [[2.0], [4.0], [6.0]]])
+    assert float(uncertainty_fidelity_guard(aligned, aligned)) == 0.0
+    flipped = torch.tensor([[[3.0], [2.0], [1.0]], [[6.0], [4.0], [2.0]]])
+    assert float(uncertainty_fidelity_guard(aligned, flipped, min_corr=0.0)) == 1.0
+    exploded = aligned * 100.0
+    assert float(uncertainty_fidelity_guard(aligned, exploded, max_scale=8.0)) == 1.0
+
+
+def test_decision_loss_guard_drops_decision_terms_when_fired():
+    from udwm.models.consistency import decision_preserving_distill_loss
+
+    wm = WorldModel.build(
+        "diffusion", 2, 1, ensemble_size=3, hidden_dims=(16, 16),
+        diffusion_steps=4, sample_steps=2, use_consistency_distill=True,
+    )
+    wm.freeze_teacher()
+    obs, act = torch.randn(8, 2), torch.randn(8, 1)
+    nxt = obs + 0.05 * torch.randn_like(obs)
+
+    def inverted(states, actions):
+        # Strongly anti-align ensemble value variance with a batch-index pattern.
+        idx = torch.arange(states.shape[1], device=states.device, dtype=states.dtype)
+        member = torch.arange(states.shape[0], device=states.device, dtype=states.dtype)
+        return (member.view(-1, 1, 1) * (idx.max() - idx).view(1, -1, 1)) + 0.0 * states.sum(-1, keepdim=True)
+
+    parts = decision_preserving_distill_loss(
+        wm.student, wm.teacher, obs, act, nxt, inverted,
+        value_weight=1.0, variance_weight=1.0,
+        guard_enabled=True, guard_min_corr=0.0,
+    )
+    assert float(parts["decision_scale"]) in (0.0, 1.0)
+    parts["total"].backward()
+    assert any(p.grad is not None for p in wm.student.parameters())
+
+
+def test_normalized_value_targets_are_location_scale_invariant():
+    from udwm.models.consistency import decision_preserving_distill_loss
+
+    wm = WorldModel.build(
+        "diffusion", 2, 1, ensemble_size=2, hidden_dims=(16, 16),
+        diffusion_steps=4, sample_steps=2, use_consistency_distill=True,
+    )
+    wm.freeze_teacher()
+    obs, act = torch.randn(6, 2), torch.randn(6, 1)
+    nxt = obs + 0.02 * torch.randn_like(obs)
+    torch.manual_seed(0)
+
+    def q_small(states, actions):
+        return states[..., :1] + 0.1 * actions
+
+    def q_shifted(states, actions):
+        return 50.0 + 7.0 * q_small(states, actions)
+
+    a = decision_preserving_distill_loss(
+        wm.student, wm.teacher, obs, act, nxt, q_small, normalize_values=True,
+    )
+    torch.manual_seed(0)
+    b = decision_preserving_distill_loss(
+        wm.student, wm.teacher, obs, act, nxt, q_shifted, normalize_values=True,
+    )
+    assert torch.allclose(a["value_geometry"], b["value_geometry"], atol=1e-5)
+    assert torch.allclose(a["value_variance"], b["value_variance"], atol=1e-5)
+
+
+def test_lagged_target_value_fn_uses_target_critic_not_online_critic():
+    from udwm.models.consistency import lagged_target_value_fn
+    from udwm.rl.sac import SACAgent
+
+    agent = SACAgent(3, 1, torch.device("cpu"), hidden_dims=(8, 8))
+    for p in agent.critic.parameters():
+        p.data.add_(3.0)
+    obs = torch.randn(4, 3)
+    act = torch.zeros(4, 1)
+    fn = lagged_target_value_fn(agent.critic_target, agent.actor)
+    q_target = agent.critic_target.min_q(obs, agent.actor.deterministic(obs))
+    q_live = agent.critic.min_q(obs, agent.actor.deterministic(obs))
+    out = fn(obs.unsqueeze(0), act.unsqueeze(0)).reshape(-1, 1)
+    assert torch.allclose(out, q_target, atol=1e-5)
+    assert not torch.allclose(q_target, q_live, atol=1e-3)
+
+
+def test_trainer_default_value_map_is_lagged_when_configured():
+    from udwm.rl.trainer import MBPOTrainer
+    from udwm.utils.config import load_config
+
+    cfg = load_config(str(ROOT / "configs" / "lagged_target_distill.yaml"))
+    cfg["mbpo"]["warmup_steps"] = 0
+    cfg["mbpo"]["model_batch_size"] = 16
+    trainer = MBPOTrainer(cfg)
+    trainer._critic_updates = 100
+    fn = trainer._make_distill_value_fn()
+    assert fn is not None
+    states = torch.randn(2, 4, trainer.obs_dim)
+    actions = torch.zeros(2, 4, trainer.action_dim)
+    q = fn(states, actions)
+    assert q.shape == (2, 4, 1)
+    assert torch.isfinite(q).all()
+

@@ -11,6 +11,7 @@ model:
   type: diffusion
   ensemble_size: 3
   hidden_dims: [128, 128]
+  student_hidden_dims: [32, 32]
   diffusion_steps: 8
   beta_start: 1.0e-4
   beta_end: 2.0e-2

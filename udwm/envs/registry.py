@@ -23,11 +23,19 @@ KNOWN_VECTOR_ENVS = {
     "Pendulum-v1": {"notes": "Classic continuous control; default for CPU demos."},
     "MountainCarContinuous-v0": {"notes": "Sparse-ish continuous; good exploration stress."},
     "LunarLanderContinuous-v3": {"notes": "Higher-dim continuous; needs gymnasium[box2d]."},
+    "DelayedBimodal-v0": {"notes": "Stochastic delayed-consequence uncertainty stress task."},
 }
 
 
 def make_env(env_id: str, seed: int | None = None, **kwargs) -> gym.Env:
     """Create a Gymnasium env; tries dm_control shim if id starts with dm_control/."""
+    if env_id == "DelayedBimodal-v0":
+        from udwm.envs.delayed_bimodal import DelayedBimodalEnv
+
+        env = DelayedBimodalEnv(**kwargs)
+        if seed is not None:
+            env.reset(seed=seed)
+        return env
     if env_id.startswith("dm_control/") or env_id.startswith("dm-control/"):
         try:
             # Shimmy registers dm_control/* ids when imported

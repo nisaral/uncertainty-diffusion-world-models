@@ -33,6 +33,7 @@ def evaluate_distillation_uncertainty(
     batch_size: int = 256,
     n_batches: int = 3,
     m_samples: int = 8,
+    paired_latents: bool = True,
 ) -> Dict[str, float]:
     """Compare teacher and student local UBE quantities on identical states.
 
@@ -54,11 +55,47 @@ def evaluate_distillation_uncertainty(
     student_proxy = distilled_world_model
     est = MCUBELocalRewards(u_min=-1e9, m_samples=max(2, int(m_samples)), debias=True)
     teacher_u, student_u, teacher_w, student_w = [], [], [], []
+    bound_gaps, bound_rhs, differential_rms = [], [], []
     for _ in range(int(n_batches)):
         batch = buffer.sample(batch_size)
         obs, act = batch["obs"], batch["actions"]
-        t = est.estimate(teacher_proxy, q_fn, policy_fn, obs, act)
-        s = est.estimate(student_proxy, q_fn, policy_fn, obs, act)
+        if paired_latents:
+            # Same x_T for teacher member i and student member i. This reduces
+            # comparison noise without changing either marginal estimand.
+            n = distilled_world_model.teacher.ensemble_size
+            latents = torch.randn(max(2, int(m_samples)), obs.shape[0], distilled_world_model.teacher.x_dim, device=obs.device)
+            tq, sq = [], []
+            for i in range(n):
+                t_i, s_i = [], []
+                for j in range(latents.shape[0]):
+                    t_raw = distilled_world_model.teacher._ddim_sample_member(i, obs, act, deterministic=False, x_T=latents[j])
+                    t_delta, _ = distilled_world_model.teacher._unpack_x(t_raw)
+                    t_x = obs + t_delta
+                    s_x, _ = distilled_world_model.student.sample_next(distilled_world_model.teacher, obs, act, member=i, x_T=latents[j])
+                    t_i.append(q_fn(t_x, policy_fn(t_x)))
+                    s_i.append(q_fn(s_x, policy_fn(s_x)))
+                tq.append(torch.stack(t_i, dim=0))
+                sq.append(torch.stack(s_i, dim=0))
+            t = est.combine(torch.stack(tq, dim=0).mean(dim=1), torch.stack(tq, dim=0).var(dim=1, unbiased=True), latents.shape[0], mean_noise_scale=1.0)
+            s = est.combine(torch.stack(sq, dim=0).mean(dim=1), torch.stack(sq, dim=0).var(dim=1, unbiased=True), latents.shape[0], mean_noise_scale=1.0)
+            # Empirical instance of the perturbed-variance theorem.  The
+            # member means are evaluated with identical latent draws, so delta
+            # measures student distortion rather than Monte-Carlo mismatch.
+            t_mu = torch.stack(tq, dim=0).mean(dim=1)
+            s_mu = torch.stack(sq, dim=0).mean(dim=1)
+            delta = s_mu - t_mu
+            delta_centered = delta - delta.mean(dim=0, keepdim=True)
+            d_rms = delta_centered.square().mean(dim=0).sqrt()
+            t_var = (t_mu - t_mu.mean(dim=0, keepdim=True)).square().mean(dim=0)
+            s_var = (s_mu - s_mu.mean(dim=0, keepdim=True)).square().mean(dim=0)
+            gap = (s_var - t_var).abs()
+            rhs = 2.0 * t_var.sqrt() * d_rms + d_rms.square()
+            bound_gaps.append(gap.reshape(-1).cpu().numpy())
+            bound_rhs.append(rhs.reshape(-1).cpu().numpy())
+            differential_rms.append(d_rms.reshape(-1).cpu().numpy())
+        else:
+            t = est.estimate(teacher_proxy, q_fn, policy_fn, obs, act)
+            s = est.estimate(student_proxy, q_fn, policy_fn, obs, act)
         teacher_u.append(t["u"].reshape(-1).cpu().numpy())
         student_u.append(s["u"].reshape(-1).cpu().numpy())
         teacher_w.append(t["w"].reshape(-1).cpu().numpy())
@@ -66,7 +103,7 @@ def evaluate_distillation_uncertainty(
 
     tu, su = np.concatenate(teacher_u), np.concatenate(student_u)
     tw, sw = np.concatenate(teacher_w), np.concatenate(student_w)
-    return {
+    report = {
         "n": float(tu.size),
         "u_rank_corr": _rank_corr(tu, su),
         "w_rank_corr": _rank_corr(tw, sw),
@@ -76,6 +113,48 @@ def evaluate_distillation_uncertainty(
         "w_rmse": float(np.sqrt(np.mean((tw - sw) ** 2))),
         "teacher_u_mean": float(np.mean(tu)),
         "student_u_mean": float(np.mean(su)),
+    }
+    if bound_gaps:
+        gaps = np.concatenate(bound_gaps)
+        rhs = np.concatenate(bound_rhs)
+        d_rms = np.concatenate(differential_rms)
+        report.update({
+            "variance_bound_gap_mean": float(gaps.mean()),
+            "variance_bound_rhs_mean": float(rhs.mean()),
+            "variance_bound_max_violation": float(np.max(gaps - rhs)),
+            "member_differential_value_error_rms": float(d_rms.mean()),
+            "variance_bound_satisfaction_rate": float(np.mean(gaps <= rhs + 1e-6)),
+        })
+    return report
+
+
+@torch.no_grad()
+def benchmark_distilled_sampling(distilled_world_model, buffer, batch_size: int = 64, repeats: int = 5):
+    """Matched wall-clock and exact denoiser-call comparison."""
+    if not hasattr(distilled_world_model, "teacher") or len(buffer) == 0:
+        return {}
+    batch = buffer.sample(min(int(batch_size), len(buffer)))
+    obs, act = batch["obs"], batch["actions"]
+    member = 0
+    # Warm both paths once before timing.
+    distilled_world_model.teacher.sample_next(obs, act, member=member, deterministic=True)
+    distilled_world_model.student.sample_next(distilled_world_model.teacher, obs, act, member=member)
+    start = time.perf_counter()
+    for _ in range(int(repeats)):
+        distilled_world_model.teacher.sample_next(obs, act, member=member, deterministic=True)
+    teacher_seconds = time.perf_counter() - start
+    start = time.perf_counter()
+    for _ in range(int(repeats)):
+        distilled_world_model.student.sample_next(distilled_world_model.teacher, obs, act, member=member)
+    student_seconds = time.perf_counter() - start
+    teacher_nfe = int(distilled_world_model.teacher.sample_steps)
+    return {
+        "teacher_sampling_seconds": float(teacher_seconds),
+        "student_sampling_seconds": float(student_seconds),
+        "sampling_speedup": float(teacher_seconds / max(student_seconds, 1e-12)),
+        "teacher_nfe": float(teacher_nfe),
+        "student_nfe": 1.0,
+        "nfe_reduction": float(teacher_nfe),
     }
 
 

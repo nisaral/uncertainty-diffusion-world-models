@@ -1,0 +1,88 @@
+# Corrected decision-aware distillation after the 2026-08-22 policy-scale
+# negative result. Uses the SAC target critic, normalized value targets, and
+# an uncertainty-fidelity guard. Live-Q hybrid remains the falsified control
+# (`delayed_bimodal_distill.yaml` + distill_use_target_critic: false).
+seed: 0
+device: cpu
+
+env:
+  id: DelayedBimodal-v0
+  max_episode_steps: 120
+
+model:
+  type: diffusion
+  ensemble_size: 5
+  hidden_dims: [96, 96]
+  student_hidden_dims: [32, 32]
+  diffusion_steps: 8
+  sample_steps: 4
+  use_consistency_distill: true
+  preserve_distilled_uncertainty: true
+  distill_two_stage: true
+  distill_teacher_pretrain_updates: 36
+  distill_freeze_after_steps: 600
+  distill_mean_weight: 0.0
+  distill_geometry_weight: 0.0
+  distill_pairwise_weight: 0.0
+  distill_decision_weight: 1.0
+  distill_value_variance_weight: 1.0
+  distill_hybrid_state_weight: 1.0
+  distill_hybrid_pairwise_weight: 1.0
+  distill_use_target_critic: true
+  distill_normalize_values: true
+  distill_guard_enabled: true
+  distill_guard_min_corr: 0.0
+  distill_guard_max_scale: 8.0
+  distill_value_warmup_updates: 50
+
+reward_term:
+  joint_with_diffusion: true
+  hidden_dims: [64, 64]
+
+ube:
+  m_samples: 4
+  u_min: 0.0
+  hidden_dims: [96, 96]
+
+agent:
+  gamma: 0.98
+  tau: 0.01
+  actor_lr: 3.0e-4
+  critic_lr: 3.0e-4
+  alpha_lr: 3.0e-4
+  auto_alpha: true
+  target_entropy: null
+  hidden_dims: [96, 96]
+  batch_size: 128
+  optimism_lambda: 0.0
+  use_ube: true
+
+u_gate:
+  mode: both
+  enable_after_steps: 900
+  stop_percentile: 0.85
+  weight_beta: 1.0
+  min_weight: 0.05
+  audit: false
+
+mbpo:
+  real_ratio: 0.2
+  rollout_length: 3
+  rollout_length_start: 1
+  horizon_curriculum_steps: 800
+  rollouts_per_step: 80
+  model_train_freq: 100
+  model_retain_epochs: 1
+  num_model_epochs: 12
+  model_batch_size: 128
+  agent_updates_per_step: 2
+  warmup_steps: 300
+  total_env_steps: 1800
+  eval_freq: 450
+  log_freq: 100
+  buffer_size: 50000
+  model_buffer_size: 50000
+
+paths:
+  log_dir: runs/lagged_target
+  checkpoint_dir: checkpoints/lagged_target

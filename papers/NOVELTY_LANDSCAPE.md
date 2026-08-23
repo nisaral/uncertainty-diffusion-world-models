@@ -11,6 +11,11 @@ Does **distillation** of a diffusion world-model ensemble preserve **decision-re
 epistemic disagreement** (local UBE \(u,w\)), or only average next-state accuracy,
 at matched NFE?
 
+**Current evidence:** yes under a **fixed** value map (20-seed RMSE 20/20); **no**
+when the same hybrid loss is coupled to an **online SAC critic** (10-seed
+uncertainty rank/RMSE 0/10 while MSE 10/10). The claim is therefore
+conditional, not a universal preservation result.
+
 This is an empirical / estimator question. It is **not** “we invented gated
 imagination” and **not** “we invented UBE.”
 

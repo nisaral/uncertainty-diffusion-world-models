@@ -4,68 +4,43 @@
 
 ## Question
 
-I am testing whether **diffusion world-model distillation** can preserve
-**decision-relevant epistemic uncertainty**, rather than only average
-transition accuracy, under a **fixed inference budget**.
+Can diffusion world-model distillation preserve **decision-relevant epistemic
+uncertainty**, rather than only average transition accuracy, under a **fixed
+inference budget**?
 
-## Why it is not obvious
+## What the evidence currently says
 
-A multi-step diffusion ensemble can generate imagined transitions, but online
-control wants **one or few** network evaluations. Distillation is the usual
-fix for that latency.
+**Yes, under a fixed value map.** On a 20-seed controlled stress study (exact
+teacher pairing, five members, 1,024-state grid), hybrid decision-aware
+distillation beat ordinary member matching on uncertainty RMSE on 20/20 seeds
+(mean Δ −0.00374, bootstrap 95% [−0.00474, −0.00289]) and on rank correlation
+on 13/20 (mean Δ +0.0317, 95% [+0.00117, +0.0632]). Top-decile recall was
+inconclusive.
 
-Uncertainty-aware control does not only need the mean next state. Local UBE
-rewards, pessimism, and “may this imagined transition train the policy” all
-depend on **ensemble disagreement after a value map**. Ordinary member-wise
-MSE can keep next-state error while changing that disagreement. If it does,
-the cheap student is not a substitute for the teacher’s uncertainty.
+**No, if the value map is the online critic.** On a 10-seed, 1,800-step policy
+study, the same hybrid loss improved next-state MSE on 10/10 seeds and
+**worsened** teacher–student uncertainty rank and RMSE on 10/10 (mean rank
+Δ −0.2968, mean RMSE Δ +180.4). Return improved on only 3/10.
 
-## Method (what is actually implemented)
+So the publishable claim is conditional:
 
-1. Train a small **diffusion teacher ensemble** on real transitions.
-2. Distill a **one-step student ensemble**, either
-   - **ordinary:** member-wise teacher matching, or
-   - **geometry:** same matching plus ensemble mean, centered member
-     deviations, and pairwise squared distances.
-3. Evaluate **teacher vs student** Monte Carlo UBE local rewards \(u\) and
-   disagreement \(w\) on identical states, with a **fixed** critic, policy,
-   and sample budget \(M\).
+> Decision-aware distillation preserves downstream uncertainty under a fixed
+> or separately validated value map. Online critic-derived targets are
+> nonstationary and unsafe.
 
-Primary numbers: rank correlation and MAE / RMSE of \(u\) and \(w\), next-state
-MSE, and NFE (teacher multi-step vs student 1).
+## What we are building next
 
-A common-mode student error can move every member together and leave
-disagreement almost unchanged. A member-differential error corrupts \(w\)
-directly. That is why the extra loss targets **centered geometry**, not only
-mean MSE.
-
-## What would count as a result
-
-- **Supports the hypothesis:** at matched next-state error and matched NFE,
-  geometry distillation keeps teacher–student \(u,w\) rankings higher (and
-  RMSE lower) than ordinary distillation.
-- **Falsifies it:** geometry does not help, or it only helps by sacrificing
-  transition accuracy. That is still worth reporting.
+Lagged **target-critic** distillation with normalized value targets, a critic
+warmup, and a minibatch **guard** that drops decision terms when student
+uncertainty is anti-aligned or scale-exploded. That method is implemented
+(`configs/lagged_target_distill.yaml`). It does not yet have a 10-seed table.
 
 ## What this is not
 
-- Not a new world-model architecture.
-- Not a new Uncertainty Bellman Equation (Luis et al., 2023).
-- Not conformal coverage, and not a guarantee.
-- Not “first uncertainty-gated imagination” (MACURA and earlier work already
-  stop or shorten rollouts when the model looks uncertain).
-- Not a large-scale control result. Current experiments are **Pendulum-v1**.
+Not a new UBE, not conformal coverage, not first gated imagination (MACURA
+and earlier work), not a large-scale control result.
 
-## Status
+## Limits
 
-The distillation losses, freeze-teacher two-stage runner, and teacher–student
-uncertainty evaluator are implemented and unit-tested. The matched ordinary
-vs geometry study is the next empirical object. The MBPO / SAC loop and
-U-gated rollouts exist as a downstream user of the score, not as the claim.
-
-## Honest limits
-
-Luis Assumptions 1–2 fail in this deep-RL setting the same way they fail in
-Luis’s own neural instantiation. The ensemble is treated as a discrete
-posterior, which is standard and contestable. \(\sqrt{U}\) is a **decision
-score**, not a calibrated interval.
+Luis Assumptions 1–2 fail as in Luis’s own deep-RL instantiation.
+\(\sqrt{U}\) is a decision score, not a calibrated interval.

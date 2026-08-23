@@ -8,4 +8,6 @@
 | [`NOVELTY_LANDSCAPE.md`](NOVELTY_LANDSCAPE.md) | What not to overclaim (MACURA, distillation, UBE) |
 | [`references.bib`](references.bib) | BibTeX |
 
-The public claim is **uncertainty-preserving distillation**, not gated imagination.
+The public claim is **conditional**: decision-aware distillation can preserve
+uncertainty under a fixed value map, and can destroy it under an online critic.
+Results: `research/RESULTS.md`.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -113,6 +113,7 @@ class WorldModel(nn.Module):
         action_dim: int,
         ensemble_size: int,
         hidden_dims,
+        student_hidden_dims=None,
         diffusion_steps: int = 10,
         beta_start: float = 1e-4,
         beta_end: float = 2e-2,
@@ -124,6 +125,14 @@ class WorldModel(nn.Module):
         distill_mean_weight: float = 1.0,
         distill_geometry_weight: float = 1.0,
         distill_pairwise_weight: float = 1.0,
+        distill_decision_weight: float = 0.0,
+        distill_value_variance_weight: float = 0.0,
+        distill_hybrid_state_weight: float = 0.0,
+        distill_hybrid_pairwise_weight: float = 0.0,
+        distill_normalize_values: bool = False,
+        distill_guard_enabled: bool = False,
+        distill_guard_min_corr: float = 0.0,
+        distill_guard_max_scale: float = 8.0,
         freeze_teacher: bool = False,
     ):
         if model_type == "gaussian":
@@ -144,7 +153,8 @@ class WorldModel(nn.Module):
         if use_consistency_distill:
             x_dim = obs_dim + (1 if joint_with_diffusion else 0)
             student = ConsistencyStudent(
-                x_dim, obs_dim, action_dim, ensemble_size, hidden_dims
+                x_dim, obs_dim, action_dim, ensemble_size,
+                hidden_dims if student_hidden_dims is None else student_hidden_dims,
             )
             model = DistilledWorldModel(
                 dyn,
@@ -153,6 +163,14 @@ class WorldModel(nn.Module):
                 mean_weight=distill_mean_weight,
                 geometry_weight=distill_geometry_weight,
                 pairwise_weight=distill_pairwise_weight,
+                decision_weight=distill_decision_weight,
+                value_variance_weight=distill_value_variance_weight,
+                hybrid_state_weight=distill_hybrid_state_weight,
+                hybrid_pairwise_weight=distill_hybrid_pairwise_weight,
+                normalize_values=distill_normalize_values,
+                guard_enabled=distill_guard_enabled,
+                guard_min_corr=distill_guard_min_corr,
+                guard_max_scale=distill_guard_max_scale,
             )
             if freeze_teacher:
                 model.freeze_teacher()

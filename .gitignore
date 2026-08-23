@@ -17,6 +17,7 @@ checkpoints/
 .idea/
 .vscode/
 *.log
+keyush_research*.pdf
 
 # Personal study / talk notes — never push
 private_notes/

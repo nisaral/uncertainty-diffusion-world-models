@@ -49,6 +49,7 @@ def u_gated_rollout(
         roll["weights"] = torch.ones(b, h, 1, device=obs.device)
         roll["sqrt_u"] = torch.zeros(b, h, 1, device=obs.device)
         roll["stopped_frac"] = torch.tensor(0.0, device=obs.device)
+        roll["stop_threshold_used"] = torch.tensor(-1.0, device=obs.device)
         return roll
 
     device = obs.device

@@ -10,6 +10,8 @@ from tqdm import trange
 from udwm.data.audit_log import GateAuditLog
 from udwm.data.replay_buffer import ReplayBuffer
 from udwm.eval.metrics import (
+    benchmark_distilled_sampling,
+    evaluate_distillation_uncertainty,
     evaluate_policy_return,
     evaluate_uncertainty_calibration,
     evaluate_world_model_accuracy,
@@ -51,6 +53,7 @@ class MBPOTrainer:
             action_dim=self.action_dim,
             ensemble_size=int(mcfg["ensemble_size"]),
             hidden_dims=tuple(mcfg["hidden_dims"]),
+            student_hidden_dims=(tuple(mcfg["student_hidden_dims"]) if mcfg.get("student_hidden_dims") else None),
             diffusion_steps=int(mcfg.get("diffusion_steps", 10)),
             beta_start=float(mcfg.get("beta_start", 1e-4)),
             beta_end=float(mcfg.get("beta_end", 2e-2)),
@@ -62,10 +65,37 @@ class MBPOTrainer:
             distill_mean_weight=float(mcfg.get("distill_mean_weight", 1.0)),
             distill_geometry_weight=float(mcfg.get("distill_geometry_weight", 1.0)),
             distill_pairwise_weight=float(mcfg.get("distill_pairwise_weight", 1.0)),
+            distill_decision_weight=float(mcfg.get("distill_decision_weight", 0.0)),
+            distill_value_variance_weight=float(mcfg.get("distill_value_variance_weight", 0.0)),
+            distill_hybrid_state_weight=float(mcfg.get("distill_hybrid_state_weight", 0.0)),
+            distill_hybrid_pairwise_weight=float(mcfg.get("distill_hybrid_pairwise_weight", 0.0)),
+            distill_normalize_values=bool(mcfg.get("distill_normalize_values", False)),
+            distill_guard_enabled=bool(mcfg.get("distill_guard_enabled", False)),
+            distill_guard_min_corr=float(mcfg.get("distill_guard_min_corr", 0.0)),
+            distill_guard_max_scale=float(mcfg.get("distill_guard_max_scale", 8.0)),
             freeze_teacher=bool(mcfg.get("freeze_teacher", False)),
         ).to(self.device)
 
-        self.wm_opt = torch.optim.Adam(self.world_model.parameters(), lr=1e-3)
+        self.distill_two_stage = bool(mcfg.get("distill_two_stage", False))
+        self.distill_freeze_after = int(mcfg.get("distill_freeze_after_steps", 0))
+        self.distill_teacher_pretrain_updates = mcfg.get("distill_teacher_pretrain_updates")
+        if self.distill_teacher_pretrain_updates is not None:
+            self.distill_teacher_pretrain_updates = int(self.distill_teacher_pretrain_updates)
+        # Number of successful teacher optimizer updates.  This guards against
+        # freezing the teacher before it has received any gradient update when
+        # the first model-training call happens at the warmup boundary.
+        self._teacher_updates = 0
+        self._critic_updates = 0
+        self._teacher_checksum_before_freeze = None
+        self._teacher_checksum_after_freeze = None
+        self._teacher_initial_checksum = (
+            self._parameter_checksum(self.world_model.teacher)
+            if hasattr(self.world_model, "teacher") else None
+        )
+        if self.distill_two_stage and hasattr(self.world_model, "teacher"):
+            self.wm_opt = torch.optim.Adam(self.world_model.teacher.parameters(), lr=1e-3)
+        else:
+            self.wm_opt = torch.optim.Adam(self.world_model.parameters(), lr=1e-3)
 
         acfg = cfg["agent"]
         self.agent = SACAgent(
@@ -160,26 +190,131 @@ class MBPOTrainer:
         bs = int(self.mbcfg["model_batch_size"])
         losses = []
         last_out: Dict[str, torch.Tensor] = {}
+        reached_teacher_budget = (
+            self.distill_teacher_pretrain_updates is not None
+            and self._teacher_updates >= self.distill_teacher_pretrain_updates
+        )
+        reached_legacy_step = (
+            self.distill_teacher_pretrain_updates is None
+            and self.total_steps >= self.distill_freeze_after
+        )
+        if (
+            self.distill_two_stage
+            and hasattr(self.world_model, "teacher")
+            and not self.world_model.teacher_frozen
+            and self._teacher_updates > 0
+            and (reached_teacher_budget or reached_legacy_step)
+        ):
+            self._teacher_checksum_before_freeze = self._parameter_checksum(self.world_model.teacher)
+            self.world_model.freeze_teacher()
+            self.wm_opt = torch.optim.Adam(self.world_model.student.parameters(), lr=1e-3)
         for _ in range(epochs):
             batch = self.real_buffer.sample(bs)
-            out = self.world_model.train_loss(
-                batch["obs"],
-                batch["actions"],
-                batch["next_obs"],
-                batch["rewards"],
-                batch["dones"],
-            )
+            if (
+                self.distill_two_stage
+                and hasattr(self.world_model, "teacher")
+                and not self.world_model.teacher_frozen
+            ):
+                # Independent bootstrap resamples preserve epistemic diversity
+                # between ensemble members instead of fitting every member to
+                # the identical minibatch realization.
+                self.world_model.teacher.update_stats(
+                    batch["obs"], batch["next_obs"], batch["rewards"]
+                )
+                member_losses = []
+                for i in range(self.world_model.teacher.ensemble_size):
+                    idx = torch.randint(0, bs, (bs,), device=self.device)
+                    member_losses.append(
+                        self.world_model.teacher.diffusion_loss_member(
+                            i, batch["obs"][idx], batch["actions"][idx],
+                            batch["next_obs"][idx], batch["rewards"][idx],
+                        )
+                    )
+                teacher_loss = torch.stack(member_losses).mean()
+                out = {
+                    "total": teacher_loss,
+                    "dynamics": teacher_loss.detach(),
+                    "reward": torch.zeros((), device=self.device),
+                }
+            else:
+                value_fn = self._make_distill_value_fn()
+                if hasattr(self.world_model, "teacher"):
+                    out = self.world_model.train_loss(
+                        batch["obs"], batch["actions"], batch["next_obs"],
+                        batch["rewards"], batch["dones"], value_fn=value_fn,
+                    )
+                else:
+                    out = self.world_model.train_loss(
+                        batch["obs"], batch["actions"], batch["next_obs"],
+                        batch["rewards"], batch["dones"],
+                    )
             self.wm_opt.zero_grad()
             out["total"].backward()
             torch.nn.utils.clip_grad_norm_(self.world_model.parameters(), 10.0)
             self.wm_opt.step()
+            if (
+                self.distill_two_stage
+                and hasattr(self.world_model, "teacher")
+                and not self.world_model.teacher_frozen
+            ):
+                self._teacher_updates += 1
             losses.append(float(out["total"].item()))
             last_out = out
         info = {"wm_loss": float(np.mean(losses))}
-        for key in ("distill_member", "distill_mean", "distill_geometry", "distill_pairwise"):
+        if hasattr(self.world_model, "teacher_frozen"):
+            info["teacher_frozen"] = float(self.world_model.teacher_frozen)
+            info["teacher_updates"] = float(self._teacher_updates)
+            info["teacher_checksum"] = self._parameter_checksum(self.world_model.teacher)
+            if self._teacher_checksum_before_freeze is not None:
+                info["teacher_checksum_before_freeze"] = float(self._teacher_checksum_before_freeze)
+        for key in (
+            "distill_member", "distill_mean", "distill_geometry", "distill_pairwise",
+            "distill_value_geometry", "distill_value_variance",
+            "distill_state_geometry", "distill_state_pairwise",
+            "distill_guard_fired", "distill_decision_scale",
+        ):
             if key in last_out:
                 info[key] = float(last_out[key].item())
         return info
+
+    def _make_distill_value_fn(self):
+        """Lagged target-critic map, or None until the critic has been updated.
+
+        Online live-Q distillation is the condition the policy-scale study
+        falsified. Default is the SAC target critic plus a stop-gradient
+        policy. Decision terms are withheld until ``distill_value_warmup_updates``.
+        """
+        if float(self.cfg["model"].get("distill_decision_weight", 0.0)) <= 0.0:
+            return None
+        warmup = int(self.cfg["model"].get("distill_value_warmup_updates", 0))
+        if self._critic_updates < warmup:
+            return None
+        use_target = bool(self.cfg["model"].get("distill_use_target_critic", False))
+        from udwm.models.consistency import lagged_target_value_fn
+
+        critic = self.agent.critic_target if use_target else self.agent.critic
+        if not use_target:
+            # Live critic is the falsified path; keep it available as a control.
+            def value_fn(states, _actions):
+                frozen = list(self.agent.actor.parameters()) + list(self.agent.critic.parameters())
+                flags = [p.requires_grad for p in frozen]
+                for p in frozen:
+                    p.requires_grad_(False)
+                try:
+                    flat = states.reshape(-1, states.shape[-1])
+                    action = self.agent.actor.deterministic(flat)
+                    q = self.agent.critic.min_q(flat, action)
+                    return q.reshape(*states.shape[:-1], 1)
+                finally:
+                    for p, flag in zip(frozen, flags):
+                        p.requires_grad_(flag)
+            return value_fn
+        return lagged_target_value_fn(critic, self.agent.actor)
+
+    @staticmethod
+    def _parameter_checksum(module) -> float:
+        """Deterministic scalar fingerprint for paired-teacher diagnostics."""
+        return float(sum(p.detach().float().abs().sum().item() for p in module.parameters()))
 
     def _imagine(self) -> Dict[str, float]:
         if len(self.real_buffer) < self.mbcfg["model_batch_size"]:
@@ -366,6 +501,20 @@ class MBPOTrainer:
                     batch_size=min(256, len(self.real_buffer)),
                 )
             )
+            if hasattr(self.world_model, "teacher") and self.world_model.teacher_frozen:
+                out.update(evaluate_distillation_uncertainty(
+                    self.world_model,
+                    self.agent.q_min,
+                    lambda states: self.agent.policy_tensor(states, deterministic=True),
+                    self.real_buffer,
+                    batch_size=min(128, len(self.real_buffer)),
+                    n_batches=1,
+                    m_samples=2,
+                ))
+                out.update(benchmark_distilled_sampling(
+                    self.world_model, self.real_buffer,
+                    batch_size=min(64, len(self.real_buffer)), repeats=3,
+                ))
             pair = collect_score_and_error(
                 self.agent, self.u_net, self.real_buffer, batch_size=min(256, len(self.real_buffer))
             )
@@ -406,6 +555,7 @@ class MBPOTrainer:
                 for _u in range(agent_updates):
                     batch = self._mixed_batch()
                     last_info.update(self.agent.update(batch))
+                    self._critic_updates += 1
                     if self.acfg.get("use_ube", True) and _u == 0:
                         last_info.update(self._update_ube(batch))
 
