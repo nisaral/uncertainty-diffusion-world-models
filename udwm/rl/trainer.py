@@ -73,6 +73,9 @@ class MBPOTrainer:
             distill_guard_enabled=bool(mcfg.get("distill_guard_enabled", False)),
             distill_guard_min_corr=float(mcfg.get("distill_guard_min_corr", 0.0)),
             distill_guard_max_scale=float(mcfg.get("distill_guard_max_scale", 8.0)),
+            distill_identified=bool(mcfg.get("distill_identified", False)),
+            distill_m_latents=int(mcfg.get("distill_m_latents", 2)),
+            distill_aleatoric_weight=float(mcfg.get("distill_aleatoric_weight", 1.0)),
             freeze_teacher=bool(mcfg.get("freeze_teacher", False)),
         ).to(self.device)
 
@@ -272,6 +275,8 @@ class MBPOTrainer:
             "distill_value_geometry", "distill_value_variance",
             "distill_state_geometry", "distill_state_pairwise",
             "distill_guard_fired", "distill_decision_scale",
+            "distill_epistemic_w", "distill_aleatoric_g",
+            "distill_teacher_w_mean", "distill_student_w_mean",
         ):
             if key in last_out:
                 info[key] = float(last_out[key].item())

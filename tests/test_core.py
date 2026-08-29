@@ -686,3 +686,140 @@ def test_trainer_default_value_map_is_lagged_when_configured():
     assert q.shape == (2, 4, 1)
     assert torch.isfinite(q).all()
 
+
+
+# ---------------------------------------------------------------------------
+# Identifiability of the decision-distillation uncertainty target.
+# See theory/distill_identifiability.py for the derivation these pin down.
+# ---------------------------------------------------------------------------
+
+def _coupled_members(d, sigma, rho, m, seed, trials=4000):
+    """[trials, N, m] member values, Var=sigma^2, cross-member Corr=rho."""
+    g = torch.Generator().manual_seed(seed)
+    n = d.numel()
+    common = torch.randn(trials, 1, m, generator=g)
+    idio = torch.randn(trials, n, m, generator=g)
+    eps = sigma * (rho**0.5 * common + (1.0 - rho) ** 0.5 * idio)
+    return d.view(1, -1, 1) + eps
+
+
+def test_coupled_w_g_is_unbiased_under_any_coupling():
+    """`coupled_w_g` recovers (w*, g*) whatever the shared-latent correlation is.
+
+    The independent-sampling correction ((N-1)/N * g/M) over-subtracts as rho
+    grows -- theory/estimator_bias.py Part 5 -- so this pins the coupling-aware
+    form that eval/metrics.py and the identified loss both rely on.
+    """
+    from udwm.models.consistency import coupled_w_g
+
+    d = torch.tensor([-0.6, -0.2, 0.0, 0.3, 0.5])
+    sigma, m = 0.6, 4
+    w_true = float((d**2).mean())
+    g_true = sigma**2
+    for rho in (0.0, 0.5, 0.95):
+        y = _coupled_members(d, sigma, rho, m, seed=7)
+        # [trials, N, m] -> [N, M, B, 1] with B = trials
+        vals = y.permute(1, 2, 0).unsqueeze(-1)
+        w_hat, g_hat = coupled_w_g(vals, m)
+        assert abs(float(w_hat.mean()) - w_true) < 0.02, (rho, float(w_hat.mean()))
+        assert abs(float(g_hat.mean()) - g_true) < 0.02, (rho, float(g_hat.mean()))
+
+
+def test_single_latent_variance_conflates_epistemic_and_aleatoric():
+    """Two ensembles, same single-latent cross-member variance, different w*.
+
+    This is the degenerate direction the M=1 `value_variance` term cannot see:
+    a student with ZERO epistemic disagreement sits on the same level set as a
+    faithful one.  The (w_deb, g) pair separates them.
+    """
+    from udwm.models.consistency import coupled_w_g
+
+    n = 5
+    d_t = torch.tensor([-0.6, -0.2, 0.0, 0.3, 0.5])
+    w_t = float((d_t**2).mean())
+    g_t, rho_t = 0.36, 0.3
+    # E[Var_i(Y_i)] (ddof=0) = w* + g*(1 - (1+(N-1)rho)/N)
+    shrink = lambda rho: 1.0 - (1.0 + (n - 1) * rho) / n
+    conflated_t = w_t + g_t * shrink(rho_t)
+
+    # Collapsed student: w* = 0, all of the statistic from latent-conditional spread.
+    d_s = torch.zeros(n)
+    g_s = conflated_t / shrink(0.0)
+
+    y_t = _coupled_members(d_t, g_t**0.5, rho_t, 1, seed=11)
+    y_s = _coupled_members(d_s, g_s**0.5, 0.0, 1, seed=12)
+    var_t = float(y_t[:, :, 0].var(dim=1, unbiased=True).mean())
+    var_s = float(y_s[:, :, 0].var(dim=1, unbiased=True).mean())
+    # The matched statistic agrees ...
+    assert abs(var_t - var_s) < 0.02, (var_t, var_s)
+    # ... while the epistemic components could not differ more.
+    y_t8 = _coupled_members(d_t, g_t**0.5, rho_t, 8, seed=13)
+    y_s8 = _coupled_members(d_s, g_s**0.5, 0.0, 8, seed=14)
+    w_t_hat, _ = coupled_w_g(y_t8.permute(1, 2, 0).unsqueeze(-1), 8)
+    w_s_hat, _ = coupled_w_g(y_s8.permute(1, 2, 0).unsqueeze(-1), 8)
+    assert float(w_t_hat.mean()) > 0.10
+    assert abs(float(w_s_hat.mean())) < 0.02
+
+
+def test_identified_decision_loss_runs_and_reports_split():
+    from udwm.models.consistency import identified_decision_distill_loss
+
+    torch.manual_seed(0)
+    wm = WorldModel.build(
+        model_type="diffusion", obs_dim=3, action_dim=1, ensemble_size=3,
+        hidden_dims=(16, 16), student_hidden_dims=(16, 16),
+        diffusion_steps=4, sample_steps=2, use_consistency_distill=True,
+    )
+    obs, act = torch.randn(8, 3), torch.randn(8, 1)
+    nxt = obs + 0.1 * torch.randn(8, 3)
+
+    def value_fn(states, _actions):
+        return states.sum(dim=-1, keepdim=True)
+
+    parts = identified_decision_distill_loss(
+        wm.student, wm.teacher, obs, act, nxt, value_fn, m_latents=2,
+    )
+    for key in ("total", "member", "value_geometry", "epistemic_w", "aleatoric_g"):
+        assert torch.isfinite(parts[key]).all(), key
+    assert float(parts["m_latents"]) == 2.0
+    parts["total"].backward()
+    grads = [p.grad for p in wm.student.parameters() if p.grad is not None]
+    assert grads and all(torch.isfinite(g).all() for g in grads)
+    # The teacher must not receive gradient from the distillation objective.
+    assert all(p.grad is None for p in wm.teacher.parameters())
+
+
+def test_estimator_variance_scales_with_kurtosis_not_just_sigma():
+    """Var(u_hat) = A/M with A carrying the FOURTH moment.
+
+    The finite-M *bias* is distribution-free (research/ESTIMATOR-BIAS-FINDING.md).
+    The *variance* is not: two laws with identical mu_i and sigma_i^2 but
+    different kurtosis give different Var(u_hat).  See theory/estimator_variance.py.
+    """
+    rng = np.random.default_rng(0)
+    mu = np.array([0.0, 0.5, 1.2, -0.3, 0.8])
+    sig2 = np.array([0.25, 0.50, 0.10, 0.80, 0.35])
+    n, m, trials = mu.size, 24, 40_000
+
+    def u_deb(y):
+        mu_hat = y.mean(axis=-1)
+        w_raw = mu_hat.var(axis=-1, ddof=0)
+        g_ub = y.var(axis=-1, ddof=1).mean(axis=-1)
+        return (w_raw - ((n - 1) / n) * g_ub / m) - g_ub
+
+    gauss = mu[None, :, None] + np.sqrt(sig2)[None, :, None] * rng.standard_normal(
+        (trials, n, m)
+    )
+    p = 0.02  # rare mode: kurtosis ~ 1/p
+    b = (rng.random((trials, n, m)) < p).astype(float)
+    rare = mu[None, :, None] + np.sqrt(sig2)[None, :, None] * (b - p) / np.sqrt(
+        p * (1 - p)
+    )
+
+    u_g, u_r = u_deb(gauss), u_deb(rare)
+    # Same estimand and same bias for both laws ...
+    u_star = float(((mu - mu.mean()) ** 2).mean()) - float(sig2.mean())
+    assert abs(float(u_g.mean()) - u_star) < 0.02
+    assert abs(float(u_r.mean()) - u_star) < 0.02
+    # ... but the rare-mode law is far noisier.
+    assert u_r.var(ddof=1) > 5.0 * u_g.var(ddof=1), (u_r.var(), u_g.var())

@@ -20,6 +20,7 @@ from udwm.eval.metrics import _rank_corr
 from udwm.models.consistency import (
     ConsistencyStudent,
     decision_preserving_distill_loss,
+    identified_decision_distill_loss,
     uncertainty_preserving_distill_loss,
 )
 from udwm.models.diffusion_dynamics import DiffusionDynamicsEnsemble
@@ -72,7 +73,7 @@ def train_teacher(seed: int, obs, actions, next_obs, ensemble_size: int, updates
     return teacher
 
 
-def train_student(teacher, variant: str, seed: int, obs, actions, next_obs, updates: int, batch_size: int, shape_weight: float = 0.001):
+def train_student(teacher, variant: str, seed: int, obs, actions, next_obs, updates: int, batch_size: int, shape_weight: float = 0.001, m_latents: int = 2):
     # Resetting to the same seed gives all arms identical initialization and
     # minibatch/noise streams; only the objective changes.
     set_seed(seed + 50_000)
@@ -107,6 +108,36 @@ def train_student(teacher, variant: str, seed: int, obs, actions, next_obs, upda
                 value_weight=1.0, variance_weight=1.0,
                 state_geometry_weight=1.0, state_pairwise_weight=1.0,
             )
+        elif variant == "decision_identified":
+            # M >= 2 latents, matching the debiased epistemic w and the
+            # aleatoric g as SEPARATE terms instead of only their sum.
+            # State-geometry weights match `decision_hybrid` so the arms differ
+            # in the uncertainty target alone.
+            parts = identified_decision_distill_loss(
+                student, teacher, obs[idx], actions[idx], next_obs[idx], decision_value,
+                m_latents=m_latents,
+                value_weight=1.0, variance_weight=1.0, aleatoric_weight=1.0,
+                state_geometry_weight=1.0, state_pairwise_weight=1.0,
+            )
+        elif variant == "decision_identified_m1_control":
+            # Same code path and the same 2x sampling cost, but the aleatoric
+            # term is switched off -- so the objective is back to matching only
+            # the sum. Isolates "two terms" from "more latents".
+            parts = identified_decision_distill_loss(
+                student, teacher, obs[idx], actions[idx], next_obs[idx], decision_value,
+                m_latents=m_latents,
+                value_weight=1.0, variance_weight=1.0, aleatoric_weight=0.0,
+                state_geometry_weight=1.0, state_pairwise_weight=1.0,
+            )
+        elif variant == "decision_identified_nostate":
+            # Ablation: identified uncertainty target with NO state-geometry
+            # terms, isolating how much of `decision_hybrid`'s gain comes from
+            # state geometry rather than from the value-variance term.
+            parts = identified_decision_distill_loss(
+                student, teacher, obs[idx], actions[idx], next_obs[idx], decision_value,
+                m_latents=m_latents,
+                value_weight=1.0, variance_weight=1.0, aleatoric_weight=1.0,
+            )
         else:
             raise ValueError(variant)
         optimizer.zero_grad()
@@ -125,7 +156,7 @@ def evaluate(teacher, student, seed: int, m_samples: int, grid_size: int):
     actions = torch.as_tensor(action, device=obs.device)
     generator = torch.Generator(device=obs.device).manual_seed(seed + 110_000)
     latents = torch.randn(m_samples, grid_size, teacher.x_dim, generator=generator, device=obs.device)
-    teacher_values, student_values, state_errors = [], [], []
+    t_per_latent, s_per_latent, state_errors = [], [], []
     for i in range(teacher.ensemble_size):
         tv, sv = [], []
         for j in range(m_samples):
@@ -135,15 +166,27 @@ def evaluate(teacher, student, seed: int, m_samples: int, grid_size: int):
             tv.append(decision_value(t_next, actions))
             sv.append(decision_value(s_next, actions))
             state_errors.append((s_next - t_next).square().mean(dim=-1))
-        teacher_values.append(torch.stack(tv).mean(dim=0))
-        student_values.append(torch.stack(sv).mean(dim=0))
-    t_values = torch.stack(teacher_values)
-    s_values = torch.stack(student_values)
+        t_per_latent.append(torch.stack(tv))            # [M, grid, 1]
+        s_per_latent.append(torch.stack(sv))
+    t_q = torch.stack(t_per_latent)                     # [N, M, grid, 1]
+    s_q = torch.stack(s_per_latent)
+    t_values = t_q.mean(dim=1)                          # [N, grid, 1] member means
+    s_values = s_q.mean(dim=1)
     t_w = t_values.var(dim=0, unbiased=True).reshape(-1).cpu().numpy()
     s_w = s_values.var(dim=0, unbiased=True).reshape(-1).cpu().numpy()
     cutoff = np.quantile(t_w, 0.9)
     predicted_cutoff = np.quantile(s_w, 0.9)
     top_recall = float(np.mean(s_w[t_w >= cutoff] >= predicted_cutoff))
+
+    # The latents above are SHARED across members, so the member means are
+    # coupled and `t_w` carries the (g - Sigma_bar)/M inflation. Report the
+    # coupling-aware debiased split as well: `w_deb` is the epistemic estimand
+    # and `g` the aleatoric one. Matching only their SUM is the degenerate
+    # objective (theory/distill_identifiability.py).
+    t_wd, t_g = _coupled_split(t_q, m_samples)
+    s_wd, s_g = _coupled_split(s_q, m_samples)
+    conflated_t = t_w + t_g
+    conflated_s = s_w + s_g
     return {
         "n": int(grid_size),
         "w_rank_corr": _rank_corr(t_w, s_w),
@@ -153,17 +196,61 @@ def evaluate(teacher, student, seed: int, m_samples: int, grid_size: int):
         "member_value_rmse": float(torch.sqrt((t_values - s_values).square().mean()).item()),
         "paired_state_mse": float(torch.cat(state_errors).mean().item()),
         "teacher_w_mean": float(np.mean(t_w)),
+        # --- identifiability diagnostics ---
+        "w_deb_rank_corr": _rank_corr(t_wd, s_wd),
+        "w_deb_rmse": float(np.sqrt(np.mean((t_wd - s_wd) ** 2))),
+        "g_rank_corr": _rank_corr(t_g, s_g),
+        "g_rmse": float(np.sqrt(np.mean((t_g - s_g) ** 2))),
+        "conflated_rank_corr": _rank_corr(conflated_t, conflated_s),
+        "conflated_rmse": float(np.sqrt(np.mean((conflated_t - conflated_s) ** 2))),
+        "teacher_w_deb_mean": float(np.mean(t_wd)),
+        "student_w_deb_mean": float(np.mean(s_wd)),
+        "teacher_g_mean": float(np.mean(t_g)),
+        "student_g_mean": float(np.mean(s_g)),
+        # >1 means the student inflated aleatoric spread relative to epistemic:
+        # the signature of walking the degenerate direction.
+        "split_distortion": float(
+            (np.mean(s_g) / max(np.mean(t_g), 1e-12))
+            / max(np.mean(s_wd) / max(np.mean(t_wd), 1e-12), 1e-12)
+        ),
     }
+
+
+def _coupled_split(q: torch.Tensor, m: int):
+    """(w_deb, g) as numpy from member values ``[N, M, B, 1]`` drawn on shared latents."""
+    mu = q.mean(dim=1)
+    w_raw = mu.var(dim=0, unbiased=False)
+    z = q - mu.unsqueeze(1)
+    denom = float(max(m - 1, 1))
+    g = (z.pow(2).sum(dim=1) / denom).mean(dim=0)
+    sigma_bar = z.mean(dim=0).pow(2).sum(dim=0) / denom
+    w_deb = w_raw - (g - sigma_bar) / float(m) if m > 1 else w_raw
+    return (
+        w_deb.reshape(-1).cpu().numpy(),
+        g.reshape(-1).cpu().numpy(),
+    )
 
 
 def summarize(rows):
     variants = sorted({row["variant"] for row in rows})
+    metrics = (
+        "w_rank_corr", "w_rmse", "top_decile_recall", "member_value_rmse",
+        "paired_state_mse", "w_deb_rank_corr", "w_deb_rmse", "g_rank_corr",
+        "g_rmse", "conflated_rank_corr", "split_distortion",
+    )
+    lower_is_better = {
+        "w_rmse", "member_value_rmse", "paired_state_mse", "w_deb_rmse", "g_rmse",
+    }
     summary = {}
     for variant in variants:
         selected = [row for row in rows if row["variant"] == variant]
         summary[variant] = {}
-        for metric in ("w_rank_corr", "w_rmse", "top_decile_recall", "member_value_rmse", "paired_state_mse"):
-            values = np.asarray([row[metric] for row in selected], dtype=float)
+        for metric in metrics:
+            values = np.asarray(
+                [row[metric] for row in selected if metric in row], dtype=float
+            )
+            if values.size == 0:
+                continue
             summary[variant][metric] = {
                 "mean": float(values.mean()),
                 "std": float(values.std(ddof=1)) if len(values) > 1 else 0.0,
@@ -175,17 +262,26 @@ def summarize(rows):
         if variant == "ordinary":
             continue
         selected = [row for row in rows if row["variant"] == variant and row["seed"] in ordinary]
-        for metric in ("w_rank_corr", "w_rmse", "top_decile_recall"):
+        for metric in metrics:
             deltas = np.asarray(
-                [row[metric] - ordinary[row["seed"]][metric] for row in selected], dtype=float
+                [
+                    row[metric] - ordinary[row["seed"]][metric]
+                    for row in selected
+                    if metric in row and metric in ordinary[row["seed"]]
+                ],
+                dtype=float,
             )
             if deltas.size == 0:
                 continue
+            wins = (
+                int(np.sum(deltas < 0)) if metric in lower_is_better
+                else int(np.sum(deltas > 0))
+            )
             paired[f"{variant}_minus_ordinary_{metric}"] = {
                 "mean": float(deltas.mean()),
                 "std": float(deltas.std(ddof=1)) if deltas.size > 1 else 0.0,
                 "se": float(deltas.std(ddof=1) / np.sqrt(deltas.size)) if deltas.size > 1 else 0.0,
-                "wins": int(np.sum(deltas > 0)) if metric != "w_rmse" else int(np.sum(deltas < 0)),
+                "wins": wins,
                 "n": int(deltas.size),
                 "values": [float(v) for v in deltas],
             }
@@ -203,6 +299,8 @@ def main(argv=None):
     parser.add_argument("--m-samples", type=int, default=8)
     parser.add_argument("--grid-size", type=int, default=768)
     parser.add_argument("--shape-weight", type=float, default=0.001)
+    parser.add_argument("--m-latents", type=int, default=2,
+                        help="latents per distillation minibatch for the identified variants")
     parser.add_argument(
         "--variants", nargs="+",
         default=["ordinary", "state_geometry", "decision_geometry", "decision_hybrid"],
@@ -221,6 +319,7 @@ def main(argv=None):
             student = train_student(
                 teacher, variant, seed, obs, actions, next_obs,
                 args.student_updates, args.batch_size, args.shape_weight,
+                m_latents=args.m_latents,
             )
             report = evaluate(teacher, student, seed, args.m_samples, args.grid_size)
             report.update({"seed": seed, "variant": variant, "teacher_checksum": checksum})

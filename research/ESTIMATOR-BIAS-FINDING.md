@@ -1,18 +1,38 @@
 # The naive MC-UBE local reward is biased at O(1/M) — derivation and correction
 
 **Status:** Derived (§2, closed form); implemented (`udwm/uncertainty/mc_ube.py`).
-**Numerical verification: NOT YET RUN.** `theory/estimator_bias.py` is written but has
-not been executed — every number in §3 and §5 below is *predicted from the algebra*,
-not measured. Do not cite this document until Part 1 of that script reproduces the
-boxed formulas. Same caveat for the two new tests in `tests/test_core.py`.
+**Numerical verification: RUN 2026-08-29.** `theory/estimator_bias.py` Part 1
+reproduces the boxed constants to Monte Carlo precision for **both** the Gaussian
+and the bimodal law (at \(M=8\): measured \(+0.0916\) / \(+0.0914\) against predicted
+\(+0.0900\); the debiased column is \(\sim\!0\) at every \(M\ge2\)). The bias claim and
+the distribution-free claim are confirmed; this document is citable.
+**Three claims in it are NOT confirmed by that run** — see the box in §0 below.
 **Closes:** gap #2 in `research/proofs/theorem-A1-mc-concentration-sketch.md`
 ("biased vs unbiased variance formula consistency between \(w^\star\) and \(\hat w\)")
 **Why it matters:** this is not bookkeeping. At the repo's default budgets the bias
 is the same order as the estimand.
+**Companion:** [`ESTIMATOR-VARIANCE-FINDING.md`](ESTIMATOR-VARIANCE-FINDING.md)
+covers the second moment, which is *not* distribution-free, and revises §7's
+conclusion about what the model class buys.
+
+---
+
+## 0. Corrections after running the verification
+
+The bias algebra survived. Three downstream claims did not.
+
+| Claim in this document | What the run shows |
+|---|---|
+| §5: adaptive-\(M\) is distorted by a heterogeneous \(1/M\) bias, and "under the debiased estimator this particular differential vanishes", implying debiasing rescues novelty B | Debiasing is **not sufficient**. Adaptive-\(M\) still loses to uniform-\(M\) at matched cost: Spearman 0.821 vs 0.909, MAE 0.328 vs 0.221. The residual cause is the *variance* coefficient \(A\), not the bias — see `ESTIMATOR-VARIANCE-FINDING.md` §4. The load-bearing defect is the \(m_{\mathrm{probe}}=2\) floor. |
+| §5: selecting on the noisy probe is a winner's curse that biases unrefined states **low**, so oracle selection should rank better | The measured gap has the **opposite sign**: probe-\(w\) selection 0.821, true-\(w\) selection 0.788, gap \(-0.033\). Probe selection accidentally refines high-\(g\) states (a noisy probe is likelier to come out high when \(g\) is large), which is closer to the Neyman-optimal rule than oracle-\(w\) selection is. The §5 narrative is inverted. |
+| §5: the sample-splitting fix is "not yet implemented" | It **is** — `AdaptiveMCUBELocalRewards.sample_split=True` by default since 2026-08-19, and `ASSUMPTIONS-LOG.md` A8 records it. `theory/estimator_bias.py` Part 3 still simulates the *old* reuse-probe path, so the code and the theory script have drifted apart. Part 3's cost accounting is also wrong: with splitting on, adaptive spends \(m_{\mathrm{probe}}\) on selection **plus** \(m_{\mathrm{probe}}\) to report unrefined states, i.e. \(\approx 9\) samples/state at the stated settings, not the 7 the "matched cost" row claims. |
+
+None of these touch §1–§4 or §6.
 
 ---
 
 ## 1. The claim
+
 
 The estimator in `MCUBELocalRewards.estimate` is, per state-action:
 
@@ -81,11 +101,22 @@ the cross terms vanishing because \(\mathbb E[e_i]=0\). Independence gives
 
 **Distribution-free.** Only \(\sigma_i^2\) enters. The shape of the next-value law is
 irrelevant, so multimodality — the reason to use diffusion at all — provides no
-protection. `theory/estimator_bias.py` is set up to test this: it draws a Gaussian
-and a bimodal mixture with *matched* \(\mu_i^\star,\sigma_i^2\) (half the variance from
-mode separation, half within-mode) and checks both reproduce the same bias. That
-check has not been run yet — it is the single most falsifiable prediction here, so
-if the two laws disagree, the distribution-free claim is wrong and §7 collapses.
+protection *against the bias*. `theory/estimator_bias.py` tests this by drawing a
+Gaussian and a bimodal mixture with *matched* \(\mu_i^\star,\sigma_i^2\) (half the
+variance from mode separation, half within-mode) and checking both reproduce the
+same bias. **Run 2026-08-29: they do**, to Monte Carlo precision at every
+\(M\in\{2,4,8,16,32,64\}\).
+
+> **But this is a statement about the first moment only.** The *variance* of
+> \(\hat u\) carries the fourth moment and is **not** distribution-free:
+> \(\operatorname{Var}(\hat u_{\mathrm{deb}})=A/M\) with
+> \(A\ni\frac{1}{N^2}\sum_i(\kappa_i-1)\sigma_i^4\). A rare mode of probability \(p\)
+> has \(\kappa\approx1/p\), giving \(M=\Omega(1/(p\varepsilon^2))\) — measured 14.6×
+> Gaussian at \(p=0.02\). The bimodal control used here is *symmetric*, hence
+> \(\kappa=2.5<3\), i.e. **below** Gaussian: it is the benign multimodal case and
+> structurally cannot detect the effect. See
+> [`ESTIMATOR-VARIANCE-FINDING.md`](ESTIMATOR-VARIANCE-FINDING.md).
+
 
 ---
 
@@ -240,19 +271,42 @@ exactly the story the paper wants.
 
 ## 8. Open items
 
-0. **Run the verification.** `theory/estimator_bias.py` has never been executed.
-   Everything above is algebra. Until Part 1 reproduces the boxed constants for
-   both the Gaussian and the bimodal law, this document is a conjecture with an
-   implementation attached.
-1. **Selection bias in adaptive \(M\)** (§5). Implement the sample-splitting probe and
-   measure whether it closes the oracle-selection gap Part 3 reports.
-2. **Dependent samples.** The derivation assumes independent \(e_i\). Sharing \(x_T\) or
-   action noise across members (a natural common-random-numbers variance reduction)
-   correlates them and changes the constant. Worth deriving before adopting CRN.
-3. **Distillation interaction (claim B).** A \(K\)-step student has biased \(\mu_i^\star\) and
-   \(\sigma_i^2\) relative to the teacher. The \(O(1/M)\) MC bias and the \(\Delta_K\) sampler
-   bias are separate and should be reported separately.
-4. **Variance of the debiased estimator.** Quantify the variance inflation; there may
-   be a shrinkage estimator with better MSE than either extreme.
-5. **Empirical.** Re-run the ablation grid with `debias` on/off as the single varied
-   factor, tracking calibration and the \(\lambda\)-vs-\(M\) prediction in §6.
+0. ~~**Run the verification.**~~ **Done 2026-08-29.** Part 1 reproduces the boxed
+   constants for both laws. See the correction box in §0 for the three §5 claims
+   the same run contradicts.
+1. **Selection bias in adaptive \(M\)** (§5). The sample-splitting probe is
+   implemented (`sample_split=True`); this document and
+   `theory/estimator_bias.py` Part 3 both still describe the pre-2026-08-19 reuse
+   path and need rewriting. The measured selection gap also has the opposite sign
+   to the one predicted here.
+2. **Dependent samples.** Derived and implemented — `combine_coupled`, with the
+   bias equal to the mean pairwise disagreement variance over \(M\). Part 5
+   confirms numerically that the *independent* correction over-subtracts under a
+   coupling (bias \(-0.0357\) at \(\rho=0.99\)). **`udwm/eval/metrics.py` was applying
+   exactly that wrong correction to paired latents** and has been fixed to use
+   `combine_coupled`; the policy-scale numbers computed with the old path need
+   re-running before they are cited. Note also that FLARE (arXiv:2602.09170)
+   conditions on a shared reverse path for the same reason, so the coupling
+   *device* is prior art — claim the identity, not the trick.
+3. **Distillation interaction (claim B).** Now sharper than "report them
+   separately": the distillation loss's single-latent variance target is
+   *unidentified*, matching \(w^\star+(g^\star-\bar\Sigma)\) rather than \(w^\star\). See
+   `theory/distill_identifiability.py` and
+   [`RESULTS-IDENTIFIABILITY-2026-08-29.md`](RESULTS-IDENTIFIABILITY-2026-08-29.md).
+4. **Variance of the debiased estimator.** Done: \(A/M\) in closed form, verified.
+   The shrinkage-estimator question (better MSE than either extreme) is still open.
+5. **Empirical.** The `debias` on/off ablation and the \(\lambda\)-vs-\(M\) prediction
+   in §6 remain unrun.
+6. **Convention mismatch.** `combine` uses `unbiased=False` (ddof=0) for \(\hat w\),
+   matching Luis's finite-population \(\frac1N\sum_i(\mu_i-\bar\mu)^2\); the
+   distillation loss and every metric use `unbiased=True` (ddof=1). At \(N=5\) that
+   is a fixed \(1.25\times\) factor between the quantity the U-network regresses on
+   and the quantity the student is trained and scored against. Constant, so it
+   cannot flip a rank correlation, but it inflates every reported `w_rmse` by 25%.
+7. **The Gaussian branch is not bias-free.** §7 claims the bias "does not arise
+   for Gaussian ensembles". Its member mean is an exact plug-in, but
+   `mc_ube.estimate` computes \(Q(\mathbb E[s'])\), not \(\mathbb E[Q(s')]\) — a
+   deterministic Jensen/curvature gap, not removable by sampling. The honest
+   asymmetry is *stochastic and fixable* versus *deterministic and not*, not
+   *present* versus *absent*.
+

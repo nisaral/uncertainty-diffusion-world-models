@@ -50,6 +50,35 @@ VARIANTS = {
         "distill_guard_enabled": True,
         "distill_value_warmup_updates": 50,
     },
+    # --- identifiability arms -------------------------------------------------
+    # The 2x2 that separates nonstationarity from identifiability:
+    #   {live-Q, lagged-Q} x {M=1 conflated, M>=2 identified}
+    # `hybrid` and `lagged_hybrid` above are the M=1 column.
+    "identified_hybrid": {
+        # Live critic -- deliberately the FALSIFIED condition -- with the
+        # identified objective. If uncertainty rank survives here, the collapse
+        # was an identifiability failure, not a nonstationarity failure.
+        "distill_decision_weight": 1.0,
+        "distill_value_variance_weight": 1.0,
+        "distill_identified": True,
+        "distill_m_latents": 2,
+        "distill_aleatoric_weight": 1.0,
+        "distill_use_target_critic": False,
+        "distill_normalize_values": False,
+        "distill_guard_enabled": False,
+    },
+    "lagged_identified": {
+        # Both corrections together: the intended method.
+        "distill_decision_weight": 1.0,
+        "distill_value_variance_weight": 1.0,
+        "distill_identified": True,
+        "distill_m_latents": 2,
+        "distill_aleatoric_weight": 1.0,
+        "distill_use_target_critic": True,
+        "distill_normalize_values": True,
+        "distill_guard_enabled": True,
+        "distill_value_warmup_updates": 50,
+    },
 }
 
 

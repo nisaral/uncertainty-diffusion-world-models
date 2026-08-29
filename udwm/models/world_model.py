@@ -133,6 +133,9 @@ class WorldModel(nn.Module):
         distill_guard_enabled: bool = False,
         distill_guard_min_corr: float = 0.0,
         distill_guard_max_scale: float = 8.0,
+        distill_identified: bool = False,
+        distill_m_latents: int = 2,
+        distill_aleatoric_weight: float = 1.0,
         freeze_teacher: bool = False,
     ):
         if model_type == "gaussian":
@@ -171,6 +174,9 @@ class WorldModel(nn.Module):
                 guard_enabled=distill_guard_enabled,
                 guard_min_corr=distill_guard_min_corr,
                 guard_max_scale=distill_guard_max_scale,
+                identified=distill_identified,
+                m_latents=distill_m_latents,
+                aleatoric_weight=distill_aleatoric_weight,
             )
             if freeze_teacher:
                 model.freeze_teacher()

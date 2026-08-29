@@ -76,13 +76,21 @@ def evaluate_distillation_uncertainty(
                     s_i.append(q_fn(s_x, policy_fn(s_x)))
                 tq.append(torch.stack(t_i, dim=0))
                 sq.append(torch.stack(s_i, dim=0))
-            t = est.combine(torch.stack(tq, dim=0).mean(dim=1), torch.stack(tq, dim=0).var(dim=1, unbiased=True), latents.shape[0], mean_noise_scale=1.0)
-            s = est.combine(torch.stack(sq, dim=0).mean(dim=1), torch.stack(sq, dim=0).var(dim=1, unbiased=True), latents.shape[0], mean_noise_scale=1.0)
+            tq_all = torch.stack(tq, dim=0)   # [N, M, B, 1]
+            sq_all = torch.stack(sq, dim=0)
+            # The latents above are SHARED across members (paired_latents), so the
+            # member means are coupled. `combine`'s ((N-1)/N)*g/M correction is the
+            # INDEPENDENT-sampling special case and over-subtracts under a coupling
+            # -- see theory/estimator_bias.py Part 5, where it drives the bias
+            # negative as rho grows. `combine_coupled` estimates g and Sigma_bar
+            # from the same samples and stays unbiased at any coupling.
+            t = est.combine_coupled(tq_all)
+            s = est.combine_coupled(sq_all)
             # Empirical instance of the perturbed-variance theorem.  The
             # member means are evaluated with identical latent draws, so delta
             # measures student distortion rather than Monte-Carlo mismatch.
-            t_mu = torch.stack(tq, dim=0).mean(dim=1)
-            s_mu = torch.stack(sq, dim=0).mean(dim=1)
+            t_mu = tq_all.mean(dim=1)
+            s_mu = sq_all.mean(dim=1)
             delta = s_mu - t_mu
             delta_centered = delta - delta.mean(dim=0, keepdim=True)
             d_rms = delta_centered.square().mean(dim=0).sqrt()

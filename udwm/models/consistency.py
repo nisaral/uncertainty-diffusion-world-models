@@ -338,6 +338,143 @@ def decision_preserving_distill_loss(
     }
 
 
+def coupled_w_g(values: torch.Tensor, m: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Coupling-aware (w_deb, g) from member values shaped ``[N, M, B, 1]``.
+
+    Mirrors ``MCUBELocalRewards.combine_coupled`` but keeps the graph, so the
+    debiased epistemic term is differentiable w.r.t. the student. ``values`` are
+    drawn with the SAME M latents for every member (a shared-latent coupling),
+    which is why the independent-sampling correction ``(N-1)/N * g/M`` does not
+    apply here and ``(g - Sigma_bar)/M`` does.
+    """
+    n = values.shape[0]
+    mu = values.mean(dim=1)                                  # [N,B,1]
+    w_raw = mu.var(dim=0, unbiased=False)                    # [B,1]
+    z = values - mu.unsqueeze(1)
+    denom = float(max(m - 1, 1))
+    g = (z.pow(2).sum(dim=1) / denom).mean(dim=0)            # [B,1]
+    sigma_bar = z.mean(dim=0).pow(2).sum(dim=0) / denom      # [B,1]
+    w_deb = w_raw - (g - sigma_bar) / float(m) if m > 1 else w_raw
+    return w_deb, g
+
+
+def identified_decision_distill_loss(
+    student: ConsistencyStudent,
+    teacher: DiffusionDynamicsEnsemble,
+    obs: torch.Tensor,
+    actions: torch.Tensor,
+    next_obs: torch.Tensor,
+    value_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    rewards: Optional[torch.Tensor] = None,
+    m_latents: int = 2,
+    value_weight: float = 1.0,
+    variance_weight: float = 1.0,
+    aleatoric_weight: float = 1.0,
+    state_geometry_weight: float = 0.0,
+    state_pairwise_weight: float = 0.0,
+    normalize_values: bool = False,
+) -> Dict[str, torch.Tensor]:
+    """Decision-aware distillation with an *identified* uncertainty target.
+
+    ``decision_preserving_distill_loss`` matches the cross-member value variance
+    at a **single** shared diffusion latent. By the coupling identity that
+    statistic has expectation ``w* + (g* - Sigma_bar)`` -- one equation in two
+    unknowns -- so a student can satisfy it with zero epistemic disagreement by
+    inflating its latent-conditional spread instead. See
+    ``theory/distill_identifiability.py`` for the exact zero-loss family.
+
+    Drawing ``m_latents >= 2`` and matching the debiased ``w`` and the aleatoric
+    ``g`` as two separate terms removes that direction. This is the epistemic /
+    ensemble analogue of the variance correction Voelcker et al. (arXiv:2505.22772)
+    use to make a value-aware model loss calibrated under a sampled model; there
+    the collapsing variance is one model's aleatoric spread, here it is the
+    disagreement across members.
+    """
+    teacher.eval()
+    m = max(2, int(m_latents))
+    b = obs.shape[0]
+    device = obs.device
+    delta = next_obs - obs
+    x0_data = teacher._pack_x(delta, rewards if teacher.joint_reward else None)
+
+    t_vals, s_vals, member_sq, state_geom_sq, state_pair_sq = [], [], [], [], []
+    for _ in range(m):
+        t_idx = torch.randint(0, teacher.diffusion_steps, (b,), device=device)
+        noise = torch.randn_like(x0_data)
+        sqrt_ab = teacher.schedule.sqrt_alpha_bar[t_idx].unsqueeze(-1)
+        sqrt_om = teacher.schedule.sqrt_one_minus_alpha_bar[t_idx].unsqueeze(-1)
+        x_t = sqrt_ab * x0_data + sqrt_om * noise
+        t_scaled = (t_idx.float() + 1.0) / teacher.diffusion_steps
+        t_x0, s_x0 = [], []
+        for i in range(student.ensemble_size):
+            with torch.no_grad():
+                eps = teacher.members[i](x_t, t_scaled, obs, actions)
+                ab = teacher.schedule.alpha_bar[t_idx].unsqueeze(-1)
+                target = (x_t - torch.sqrt(1.0 - ab) * eps) / (torch.sqrt(ab) + 1e-8)
+            t_x0.append(target.detach())
+            s_x0.append(student.forward_member(i, x_t, t_scaled, obs, actions))
+        t_all = torch.stack(t_x0, dim=0)                      # [N,B,D]
+        s_all = torch.stack(s_x0, dim=0)
+        member_sq.append(F.mse_loss(s_all, t_all))
+        state_geom_sq.append(F.mse_loss(
+            s_all - s_all.mean(dim=0, keepdim=True),
+            t_all - t_all.mean(dim=0, keepdim=True),
+        ))
+        state_pair_sq.append(F.mse_loss(
+            (s_all[:, None] - s_all[None, :]).pow(2).mean(dim=-1),
+            (t_all[:, None] - t_all[None, :]).pow(2).mean(dim=-1),
+        ))
+        expanded = actions.unsqueeze(0).expand(student.ensemble_size, -1, -1)
+        t_next = obs.unsqueeze(0) + teacher._unpack_x(t_all)[0]
+        s_next = obs.unsqueeze(0) + teacher._unpack_x(s_all)[0]
+        with torch.no_grad():
+            t_vals.append(value_fn(t_next, expanded))
+        s_vals.append(value_fn(s_next, expanded))
+
+    t_value = torch.stack(t_vals, dim=1)                      # [N,M,B,1]
+    s_value = torch.stack(s_vals, dim=1)
+    if normalize_values:
+        loc = t_value.mean().detach()
+        scale = t_value.std(unbiased=False).detach().clamp_min(1e-6)
+        t_value = (t_value - loc) / scale
+        s_value = (s_value - loc) / scale
+
+    t_w, t_g = coupled_w_g(t_value, m)
+    s_w, s_g = coupled_w_g(s_value, m)
+    # Member means are now M-averaged, so the geometry term is a lower-variance
+    # estimate of the same object the single-latent version was targeting.
+    t_mu, s_mu = t_value.mean(dim=1), s_value.mean(dim=1)
+    t_center = t_mu - t_mu.mean(dim=0, keepdim=True)
+    s_center = s_mu - s_mu.mean(dim=0, keepdim=True)
+
+    member = torch.stack(member_sq).mean()
+    state_geometry = torch.stack(state_geom_sq).mean()
+    state_pairwise = torch.stack(state_pair_sq).mean()
+    value_geometry = F.mse_loss(s_center, t_center)
+    epistemic = F.mse_loss(s_w, t_w.detach())
+    aleatoric = F.mse_loss(s_g, t_g.detach())
+    total = (
+        member
+        + float(value_weight) * value_geometry
+        + float(variance_weight) * epistemic
+        + float(aleatoric_weight) * aleatoric
+        + float(state_geometry_weight) * state_geometry
+        + float(state_pairwise_weight) * state_pairwise
+    )
+    return {
+        "total": total,
+        "member": member,
+        "value_geometry": value_geometry,
+        "epistemic_w": epistemic,
+        "aleatoric_g": aleatoric,
+        "state_geometry": state_geometry,
+        "state_pairwise": state_pairwise,
+        "teacher_w_mean": t_w.mean().detach(),
+        "student_w_mean": s_w.mean().detach(),
+        "m_latents": torch.tensor(float(m), device=device),
+    }
+
+
 class DistilledWorldModel(nn.Module):
     """Wraps a frozen teacher diffusion ensemble + trainable consistency student."""
 
@@ -357,6 +494,9 @@ class DistilledWorldModel(nn.Module):
         guard_enabled: bool = False,
         guard_min_corr: float = 0.0,
         guard_max_scale: float = 8.0,
+        identified: bool = False,
+        m_latents: int = 2,
+        aleatoric_weight: float = 1.0,
     ) -> None:
         super().__init__()
         self.teacher = teacher
@@ -376,6 +516,10 @@ class DistilledWorldModel(nn.Module):
         self.guard_enabled = bool(guard_enabled)
         self.guard_min_corr = float(guard_min_corr)
         self.guard_max_scale = float(guard_max_scale)
+        # Identified objective: M >= 2 latents, separate (w_deb, g) terms.
+        self.identified = bool(identified)
+        self.m_latents = max(2, int(m_latents))
+        self.aleatoric_weight = float(aleatoric_weight)
         self.teacher_frozen = False
 
     def freeze_teacher(self) -> None:
@@ -401,7 +545,17 @@ class DistilledWorldModel(nn.Module):
             t_loss = torch.zeros((), device=obs.device)
         else:
             t_loss = self.teacher.nll_loss(obs, actions, next_obs, rewards, dones)
-        if self.decision_weight > 0.0 and value_fn is not None:
+        if self.decision_weight > 0.0 and value_fn is not None and self.identified:
+            parts = identified_decision_distill_loss(
+                self.student, self.teacher, obs, actions, next_obs, value_fn, rewards,
+                m_latents=self.m_latents,
+                value_weight=self.decision_weight,
+                variance_weight=self.value_variance_weight,
+                aleatoric_weight=self.aleatoric_weight,
+                normalize_values=self.normalize_values,
+            )
+            s_loss = parts["total"]
+        elif self.decision_weight > 0.0 and value_fn is not None:
             parts = decision_preserving_distill_loss(
                 self.student, self.teacher, obs, actions, next_obs, value_fn, rewards,
                 value_weight=self.decision_weight,
