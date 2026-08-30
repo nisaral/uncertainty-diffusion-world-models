@@ -11,10 +11,13 @@ Does **distillation** of a diffusion world-model ensemble preserve **decision-re
 epistemic disagreement** (local UBE \(u,w\)), or only average next-state accuracy,
 at matched NFE?
 
-**Current evidence:** yes under a **fixed** value map (20-seed RMSE 20/20); **no**
-when the same hybrid loss is coupled to an **online SAC critic** (10-seed
-uncertainty rank/RMSE 0/10 while MSE 10/10). The claim is therefore
-conditional, not a universal preservation result.
+**Current evidence:** the hybrid loss is **unidentified** for \(w^\star\)
+(single-latent match of \(w+(g-\bar\Sigma)\)). Under a **fixed** map, hybrid still
+beats ordinary on RMSE 20/20 and rank 13/20 while moving variance from \(g\)
+into \(w_{\mathrm{deb}}\). Under an **online SAC critic**, the same loss hurts
+uncertainty rank/RMSE 10/10 while helping MSE 10/10. Those are one mechanism,
+two signs. Voelcker et al. (arXiv:2505.22772) is the aleatoric analogue and
+must be cited. A lagged critic does not by itself identify the target.
 
 This is an empirical / estimator question. It is **not** “we invented gated
 imagination” and **not** “we invented UBE.”
@@ -28,6 +31,7 @@ Related work that *touches* this without answering it:
 | DIAMOND | Strong diffusion WM for imagination | Multi-step epistemic value variance under distillation |
 | Luis UBE / QU-SAC | Exact recursion + Gaussian deep-RL estimators | Implicit diffusion members; distilled students |
 | Knowledge distillation + uncertainty (classification) | Sometimes match predictive entropy | Not MBRL imagination; not UBE local rewards |
+| Voelcker et al. 2025, arXiv:2505.22772 | Value-aware model losses prefer low-variance sampled models | Ensemble/epistemic split \(w\) vs \(g-\bar\Sigma\), diffusion WM distillation |
 
 **What would refute the question as a contribution:** a paper that already
 compares teacher vs student UBE (or equivalent decision scores) for diffusion

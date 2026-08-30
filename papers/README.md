@@ -8,6 +8,7 @@
 | [`NOVELTY_LANDSCAPE.md`](NOVELTY_LANDSCAPE.md) | What not to overclaim (MACURA, distillation, UBE) |
 | [`references.bib`](references.bib) | BibTeX |
 
-The public claim is **conditional**: decision-aware distillation can preserve
-uncertainty under a fixed value map, and can destroy it under an online critic.
+The public claim is **identifiability of the distillation target**: a
+single-latent hybrid loss does not pin down epistemic \(w^\star\). The fixed-map
+and live-critic tables are one mechanism, two value maps.
 Results: `research/RESULTS.md`.

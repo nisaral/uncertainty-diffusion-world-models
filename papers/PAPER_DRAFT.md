@@ -3,32 +3,30 @@
 **Working draft — not submission-ready.**  
 **Code:** https://github.com/nisaral/uncertainty-diffusion-world-models
 
-## Claim (conditional)
+## Claim
 
-Decision-aware distillation of a diffusion world-model ensemble can preserve
-downstream epistemic disagreement **when the value map is fixed or separately
-validated**. The same loss, attached to an **online** SAC critic, can keep
-next-state accuracy and destroy teacher–student uncertainty. Reliable use
-therefore needs a lagged/target critic, target normalization, and an explicit
-uncertainty-preservation guard.
+A single-latent decision-distillation loss matches
+\(w^\star+(g^\star-\bar\Sigma)\) and is **unidentified** for epistemic
+uncertainty. The student can reallocate variance between ensemble disagreement
+and aleatoric noise. Under a fixed value map that reallocation can *look like*
+preservation (`w_deb` improves). Under an online critic it can destroy
+teacher–student rankings while improving next-state MSE. Identifying the
+target requires \(M\ge2\) latents and separate \((\hat w,\hat g)\) terms.
+Lagging the critic is a different intervention (nonstationarity).
+
+Cite Voelcker et al., arXiv:2505.22772, as the aleatoric analogue.
 
 ## Evidence
 
-See `research/RESULTS-STRESS-LARGE-2026-08-21.md` (20-seed controlled, hybrid
-helps RMSE 20/20) and `research/RESULTS-POLICY-SCALE-2026-08-22.md` (10-seed
-policy, hybrid hurts uncertainty 10/10 while helping MSE 10/10). Teacher
-checksum gaps were exactly zero in both.
+- Identifiability construction and 20-seed identified-vs-hybrid table:
+  `research/RESULTS-IDENTIFIABILITY-2026-08-29.md`
+- Fixed-map hybrid vs ordinary: `research/RESULTS-STRESS-LARGE-2026-08-21.md`
+- Live-critic hybrid vs ordinary: `research/RESULTS-POLICY-SCALE-2026-08-22.md`
 
-## Method sketch
-
-Teacher: \(K\)-step diffusion ensemble. Student: 1-NFE. Local UBE \(u,w\)
-estimated by Monte Carlo because members are implicit samplers.
-
-Ordinary loss: member-wise \(x_0\) match. Hybrid: plus state geometry and
-value-map disagreement. Lagged correction: value map is `critic_target` with
-stop-gradient actions, z-scored on teacher batch statistics; decision terms
-are zeroed when a stop-grad fidelity guard fires.
+Teacher checksum gaps were zero. Policy 2×2 for identified loss is registered,
+not reported.
 
 ## What is not claimed
 
 A new UBE. Conformal coverage. First gated imagination. Policy SOTA.
+Identified distillation as a confirmed policy method.
