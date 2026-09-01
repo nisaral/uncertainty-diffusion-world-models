@@ -58,11 +58,14 @@ VARIANTS = {
         # Live critic -- deliberately the FALSIFIED condition -- with the
         # identified objective. If uncertainty rank survives here, the collapse
         # was an identifiability failure, not a nonstationarity failure.
+        # NOTE (2026-09-01): reweight_ema fixes the equal-weighting hole
+        # (g dominates w by orders of magnitude); see theory/ground_truth_w_g.py.
         "distill_decision_weight": 1.0,
         "distill_value_variance_weight": 1.0,
         "distill_identified": True,
         "distill_m_latents": 2,
         "distill_aleatoric_weight": 1.0,
+        "distill_reweight_ema": True,
         "distill_use_target_critic": False,
         "distill_normalize_values": False,
         "distill_guard_enabled": False,
@@ -74,6 +77,7 @@ VARIANTS = {
         "distill_identified": True,
         "distill_m_latents": 2,
         "distill_aleatoric_weight": 1.0,
+        "distill_reweight_ema": True,
         "distill_use_target_critic": True,
         "distill_normalize_values": True,
         "distill_guard_enabled": True,

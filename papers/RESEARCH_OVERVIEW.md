@@ -39,6 +39,17 @@ Identified distillation + optional lagged critic, registered as
 `identified_hybrid` / `lagged_identified`. Equal weighting of \(\hat w\) and
 \(\hat g\) is a known numerical hole (`g` dominates).
 
+**2026-09-01 status.** The policy 2x2 has a 5-seed preliminary
+(`research/RESULTS-POLICY-2X2-2026-09-01.md`): hybrid's u-rank collapse
+reproduces (-0.301, 0/5), the lagged critic recovers u-rank at 5 seeds
+(leaning nonstationarity-dominant), and the identified arm is confounded by the
+reweighting hole. A ground-truth toy (`theory/ground_truth_w_g.py`,
+`research/RESULTS-GROUND-TRUTH-W-G-2026-09-01.md`) checks (w, g) against
+analytic (w*, g*): the estimator is unbiased, the M=1 objective walks the
+degenerate direction from both inits, and the equal-weighting hole (w rank 0.40
+when g* >> w*) plus the partial nature of reweighting are quantified. Next:
+settle the weighting on the toy, then re-run the identified policy arms.
+
 ## What this is not
 
 Not a new UBE, not conformal coverage, not first gated imagination, not

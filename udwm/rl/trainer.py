@@ -76,6 +76,8 @@ class MBPOTrainer:
             distill_identified=bool(mcfg.get("distill_identified", False)),
             distill_m_latents=int(mcfg.get("distill_m_latents", 2)),
             distill_aleatoric_weight=float(mcfg.get("distill_aleatoric_weight", 1.0)),
+            distill_reweight_ema=bool(mcfg.get("distill_reweight_ema", False)),
+            distill_reweight_floor=float(mcfg.get("distill_reweight_floor", 1e-6)),
             freeze_teacher=bool(mcfg.get("freeze_teacher", False)),
         ).to(self.device)
 

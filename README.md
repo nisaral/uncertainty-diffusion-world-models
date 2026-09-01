@@ -89,6 +89,29 @@ numerically weak. Not yet reweighted.
 
 ## What comes next
 
+**Preliminary 2x2 (5 seeds, 2026-09-01):** the registered table exists but is
+NOT a verdict. [`runs/policy_identifiability_2x2.json`](runs/policy_identifiability_2x2.json)
+(5 seeds x 5 arms x 1,800 steps, exact teacher pairing) is summarized in
+[`research/RESULTS-POLICY-2X2-2026-09-01.md`](research/RESULTS-POLICY-2X2-2026-09-01.md).
+It reproduces the hybrid u-rank collapse (delta -0.301, 0/5), and at 5 seeds the
+lagged critic fully recovers u-rank, which leans "nonstationarity is the
+dominant measured cause on this benchmark". The identified arm ran with the
+known equal-weighting hole, so its numbers are confounded - no policy verdict.
+The 10-seed rerun is pre-registered with a written decision tree:
+[`research/DECISION-TREE-2X2-PREREGISTRATION.md`](research/DECISION-TREE-2X2-PREREGISTRATION.md).
+
+Ground-truth toy (2026-09-01): [`theory/ground_truth_w_g.py`](theory/ground_truth_w_g.py)
+checks the identified loss's (w, g) against ANALYTIC (w*, g*) for the first
+time - the estimator is unbiased, hybrid walks the degenerate direction from
+both inits, and the equal-weighting hole (w rank 0.40 when g* >> w*) is
+quantified. The EMA per-term reweighting fix
+(`udwm.models.consistency.TermScaleEMA`, `distill_reweight_ema: true`) recovers
+w (rank 0.97) in the hole regime. Part 4's finding: no single scalar weighting
+gives both w and g good relative magnitude when g* >> w*, but w RANKING is
+robust to the weighting once normalised - the hole is a bounded limitation for
+rank-based downstream gating.
+[`research/RESULTS-GROUND-TRUTH-W-G-2026-09-01.md`](research/RESULTS-GROUND-TRUTH-W-G-2026-09-01.md).
+
 Registered policy arms (`ordinary` / `hybrid` / `lagged_hybrid` /
 `identified_hybrid` / `lagged_identified`):
 
@@ -105,8 +128,9 @@ python -m udwm.scripts.run_delayed_bimodal_policy_ablation \
   --seeds 0 1 2
 ```
 
-Until that table exists, do not treat identified distillation as confirmed in
-policy.
+Run the full 5-arm 2x2 at 10 seeds with `distill_reweight_ema: true` on the
+identified arms (see the decision tree for adjudication). Until that re-run, do
+not treat identified distillation as confirmed in policy.
 
 ---
 
@@ -116,10 +140,11 @@ policy.
 pip install -r requirements.txt
 
 python -m udwm.scripts.smoke_test
-python -m pytest tests/test_core.py -q
+python -m pytest tests/test_core.py tests/test_ground_truth_w_g.py -q
 python theory/toy_ube_mdp.py
 python theory/distill_identifiability.py
 python theory/estimator_variance.py
+python theory/ground_truth_w_g.py
 ```
 
 ---

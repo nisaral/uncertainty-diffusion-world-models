@@ -136,6 +136,8 @@ class WorldModel(nn.Module):
         distill_identified: bool = False,
         distill_m_latents: int = 2,
         distill_aleatoric_weight: float = 1.0,
+        distill_reweight_ema: bool = False,
+        distill_reweight_floor: float = 1e-6,
         freeze_teacher: bool = False,
     ):
         if model_type == "gaussian":
@@ -177,6 +179,8 @@ class WorldModel(nn.Module):
                 identified=distill_identified,
                 m_latents=distill_m_latents,
                 aleatoric_weight=distill_aleatoric_weight,
+                reweight_ema=distill_reweight_ema,
+                reweight_floor=distill_reweight_floor,
             )
             if freeze_teacher:
                 model.freeze_teacher()

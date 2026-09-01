@@ -27,6 +27,9 @@ model:
   distill_hybrid_pairwise_weight: 0.0
   # Live critic: the 10-seed policy study falsified this coupling.
   distill_use_target_critic: false
+  # EMA per-term reweighting for the identified loss (g >> w hole).
+  distill_reweight_ema: false
+  distill_reweight_floor: 1.0e-6
   distill_normalize_values: false
   distill_guard_enabled: false
 

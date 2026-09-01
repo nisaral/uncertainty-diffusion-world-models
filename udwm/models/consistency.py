@@ -358,6 +358,35 @@ def coupled_w_g(values: torch.Tensor, m: int) -> Tuple[torch.Tensor, torch.Tenso
     return w_deb, g
 
 
+class TermScaleEMA:
+    """Running-mean per-term scale for loss-term reweighting.
+
+    Each (epistemic, aleatoric) term is divided by the square of its own EMA
+    scale, so terms whose true values differ by orders of magnitude are matched
+    to comparable RELATIVE accuracy instead of letting the larger term drown
+    the smaller.  Same idea as reward normalisation in policy-gradient methods.
+    A floor prevents division blow-up while a statistic sits near zero early in
+    training.  The EMA is updated on the TEACHER's batch statistic, which is
+    stationary, so the normalizer converges and does not chase the student.
+    """
+
+    def __init__(self, beta: float = 0.99, floor: float = 1e-6) -> None:
+        self.beta = float(beta)
+        self.floor = float(floor)
+        self._scale: Dict[str, float] = {}
+
+    @torch.no_grad()
+    def update(self, name: str, batch_stat: torch.Tensor) -> torch.Tensor:
+        """EMA of E[|batch_stat|]; returns the inverse-variance weight."""
+        s = float(batch_stat.detach().abs().mean())
+        if name not in self._scale:
+            self._scale[name] = s
+        else:
+            self._scale[name] = self.beta * self._scale[name] + (1.0 - self.beta) * s
+        sc = max(self._scale[name], self.floor)
+        return torch.tensor(1.0 / (sc * sc), dtype=batch_stat.dtype, device=batch_stat.device)
+
+
 def identified_decision_distill_loss(
     student: ConsistencyStudent,
     teacher: DiffusionDynamicsEnsemble,
@@ -373,6 +402,8 @@ def identified_decision_distill_loss(
     state_geometry_weight: float = 0.0,
     state_pairwise_weight: float = 0.0,
     normalize_values: bool = False,
+    reweight: bool = False,
+    normalizer: Optional[TermScaleEMA] = None,
 ) -> Dict[str, torch.Tensor]:
     """Decision-aware distillation with an *identified* uncertainty target.
 
@@ -441,6 +472,11 @@ def identified_decision_distill_loss(
 
     t_w, t_g = coupled_w_g(t_value, m)
     s_w, s_g = coupled_w_g(s_value, m)
+    if reweight and normalizer is not None:
+        w_scale = normalizer.update("w", t_w)
+        g_scale = normalizer.update("g", t_g)
+    else:
+        w_scale = g_scale = torch.ones((), device=t_w.device)
     # Member means are now M-averaged, so the geometry term is a lower-variance
     # estimate of the same object the single-latent version was targeting.
     t_mu, s_mu = t_value.mean(dim=1), s_value.mean(dim=1)
@@ -451,8 +487,8 @@ def identified_decision_distill_loss(
     state_geometry = torch.stack(state_geom_sq).mean()
     state_pairwise = torch.stack(state_pair_sq).mean()
     value_geometry = F.mse_loss(s_center, t_center)
-    epistemic = F.mse_loss(s_w, t_w.detach())
-    aleatoric = F.mse_loss(s_g, t_g.detach())
+    epistemic = F.mse_loss(s_w, t_w.detach()) * w_scale
+    aleatoric = F.mse_loss(s_g, t_g.detach()) * g_scale
     total = (
         member
         + float(value_weight) * value_geometry
@@ -497,6 +533,8 @@ class DistilledWorldModel(nn.Module):
         identified: bool = False,
         m_latents: int = 2,
         aleatoric_weight: float = 1.0,
+        reweight_ema: bool = False,
+        reweight_floor: float = 1e-6,
     ) -> None:
         super().__init__()
         self.teacher = teacher
@@ -520,6 +558,8 @@ class DistilledWorldModel(nn.Module):
         self.identified = bool(identified)
         self.m_latents = max(2, int(m_latents))
         self.aleatoric_weight = float(aleatoric_weight)
+        self.reweight_ema = bool(reweight_ema)
+        self.scale_ema = TermScaleEMA(floor=float(reweight_floor)) if reweight_ema else None
         self.teacher_frozen = False
 
     def freeze_teacher(self) -> None:
@@ -553,6 +593,8 @@ class DistilledWorldModel(nn.Module):
                 variance_weight=self.value_variance_weight,
                 aleatoric_weight=self.aleatoric_weight,
                 normalize_values=self.normalize_values,
+                reweight=self.reweight_ema,
+                normalizer=self.scale_ema,
             )
             s_loss = parts["total"]
         elif self.decision_weight > 0.0 and value_fn is not None:
