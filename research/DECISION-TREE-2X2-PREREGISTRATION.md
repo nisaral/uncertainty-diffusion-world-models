@@ -70,3 +70,34 @@ the weighting is the open question P4 answers. If w *ranking* is robust to the
 weighting, the identified arm's downstream effect (rank-based gating) is
 bounded even if magnitudes remain imperfect -- that reframing is stated in the
 write-up either way.
+
+
+---
+
+## Extension registration (2026-09-03): N=10 -> N=30, adjudication on the pooled set
+
+**Registered before any verdict from the 10-seed rerun was read or reported**
+(the 10-seed data existed but no summary/adjudication had been written).
+
+- Same arms (all five, one batch), same config
+  (`configs/delayed_bimodal_distill.yaml`), 1,800 env steps, exact teacher
+  checksum pairing per seed (gap 0).
+- **N = 30 seeds total (0..29).** Seeds 0..9 from the completed 10-seed rerun
+  (`runs/policy_identifiability_2x2_10seed.json`); seeds 10..29 run with the
+  identical code and protocol via
+  `udwm.scripts.run_policy_2x2_split_seeds` (per-seed batches, merged; exact
+  pairing holds by construction per seed).
+- **Adjudication on the pooled 30-seed set**, same primary endpoint
+  (`u_rank_corr`), same four contrasts, same 5,000-draw percentile bootstrap,
+  with the seed-count rule generalised from the 10-seed rule:
+  - "confirmed" = CI excludes 0 AND >= 70% of paired seeds (>= 21/30) in the
+    predicted direction;
+  - "absent" = the opposite is confirmed;
+  - "inconclusive" = anything else, reported as inconclusive.
+- The 10-seed slice is reported for continuity only; it does not adjudicate.
+- If a contrast is inconclusive at N=30, that is the reported outcome; further
+  extension would require a new registration.
+- Execution note: seed 9 of the first 10 ran as a single-seed crash probe at
+  default torch threads before the wave (its five arms still shared one exact
+  teacher); it is re-run at the same thread setting as the rest of the table
+  for uniformity, and the pooled file contains only the uniform-config rows.
