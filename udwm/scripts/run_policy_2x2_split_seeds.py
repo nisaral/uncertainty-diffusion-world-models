@@ -42,11 +42,11 @@ def seed_file(out: Path, seed: int) -> Path:
     return out.with_name(f"{out.stem}_seed{seed}.partial.json")
 
 
-def seed_complete(path: Path) -> bool:
+def seed_complete(path: Path, variants) -> bool:
     if not path.exists():
         return False
     rows = json.loads(path.read_text(encoding="utf-8")).get("rows", [])
-    return {r["variant"] for r in rows} >= set(VARIANT_ORDER)
+    return {r["variant"] for r in rows} >= set(variants)
 
 
 def run_seed(seed: int, args, out: Path) -> int:
@@ -57,7 +57,7 @@ def run_seed(seed: int, args, out: Path) -> int:
         "--config",
         args.config,
         "--variants",
-        *VARIANT_ORDER,
+        *args.variants,
         "--seeds",
         str(seed),
         "--steps",
@@ -78,6 +78,8 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/delayed_bimodal_distill.yaml")
     parser.add_argument("--seeds", type=int, nargs="+", default=list(range(10)))
+    parser.add_argument("--variants", nargs="+", default=list(VARIANT_ORDER),
+                        help="arm subset (default: all five 2x2 arms)")
     parser.add_argument("--steps", type=int, default=1800)
     parser.add_argument("--out", default="runs/policy_identifiability_2x2_10seed.json")
     parser.add_argument("--jobs", type=int, default=10)
@@ -93,9 +95,9 @@ def main(argv=None) -> None:
     if args.existing:
         existing_rows = json.loads(Path(args.existing).read_text(encoding="utf-8")).get("rows", [])
     existing_seeds = {
-        int(r["seed"]) for r in existing_rows if r["variant"] in VARIANT_ORDER
+        int(r["seed"]) for r in existing_rows if r["variant"] in set(args.variants)
     }
-    covered = {s: seed_complete(seed_file(out, s)) or s in existing_seeds for s in args.seeds}
+    covered = {s: seed_complete(seed_file(out, s), args.variants) or s in existing_seeds for s in args.seeds}
     pending = [s for s in args.seeds if not covered[s]]
     print(f"[split] {len(args.seeds) - len(pending)} seeds already available; {len(pending)} pending")
 
@@ -121,18 +123,19 @@ def main(argv=None) -> None:
         if path.exists():
             rows.extend(json.loads(path.read_text(encoding="utf-8")).get("rows", []))
             continue
-        src = [r for r in existing_rows if int(r["seed"]) == s and r["variant"] in VARIANT_ORDER]
+        want = set(args.variants)
+        src = [r for r in existing_rows if int(r["seed"]) == s and r["variant"] in want]
         rows.extend(src)
-        if len(src) < len(VARIANT_ORDER):
-            raise SystemExit(f"[split] no rows available for seed {s}: {len(src)}/{len(VARIANT_ORDER)} arms")
-    order = {v: i for i, v in enumerate(VARIANT_ORDER)}
+        if len(src) < len(want):
+            raise SystemExit(f"[split] no rows available for seed {s}: {len(src)}/{len(want)} arms")
+    order = {v: i for i, v in enumerate(args.variants)}
     rows.sort(key=lambda r: (int(r["seed"]), order.get(r["variant"], 99)))
     payload = {
         "protocol": {
             "config": args.config,
             "seeds": list(args.seeds),
             "steps": args.steps,
-            "variants": list(VARIANT_ORDER),
+            "variants": list(args.variants),
             "out": str(out),
             "resume": False,
             "driver": "run_policy_2x2_split_seeds.py (per-seed batches, merged)",
