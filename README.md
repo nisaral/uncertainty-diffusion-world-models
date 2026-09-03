@@ -21,6 +21,7 @@ model, **not** conformal coverage, and **not** a SOTA control claim.
 Theory: [`theory/distill_identifiability.py`](theory/distill_identifiability.py).  
 Write-up: [`research/RESULTS-IDENTIFIABILITY-2026-08-29.md`](research/RESULTS-IDENTIFIABILITY-2026-08-29.md).  
 Index: [`research/RESULTS.md`](research/RESULTS.md).
+Reproduction: [`REPRODUCE.md`](REPRODUCE.md).
 
 ---
 
@@ -61,6 +62,12 @@ Same hybrid loss, online Q as the value map:
 | Uncertainty rank correlation | worse **10/10**; mean Δ −0.2968 |
 | Uncertainty RMSE | worse **10/10**; mean Δ +180.4 |
 | Return | better 3/10 |
+
+Confirmed at N=30 inside the policy 2×2
+([`research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md`](research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md)):
+u-rank 0/30 (Δ −0.310), u-RMSE worse 30/30, next-state MSE better 30/30
+(Δ −0.0817), return inconclusive (12/30). The falsification is now 30/30,
+not 10/10.
 
 The transfer claim (“drop this loss into MBPO”) is **falsified**.
 

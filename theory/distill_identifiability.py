@@ -33,6 +33,8 @@ it is not what creates it -- the loss is unidentified even with a perfectly
 fixed value map.  A lagged target critic therefore cannot be expected to close
 it, which is a falsifiable prediction about `configs/lagged_target_distill.yaml`.
 
+Adjudicated 2026-09-03 (N=30 policy 2x2, `research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md`): the rank-collapse prediction was confirmed stronger than stated (lagging removed the collapse, 30/30, rather than merely reducing it), but the identified loss (M>=2, split (w,g)) did NOT transfer in policy; nonstationarity was the dominant measured mechanism. Parts 1-2 above remain the identifiability result.
+
 This is the ensemble/epistemic analogue of the variance-shrinkage pathology
 proved for value-aware model losses under sampled models by Voelcker et al.,
 "Calibrated Value-Aware Model Learning with Stochastic Environment Models"
@@ -266,6 +268,17 @@ def part3_not_a_critic_problem() -> None:
     print("    M>=2 fixes it under the live critic, the paper's thesis becomes an")
     print("    identifiability result, which is stronger and more portable than")
     print("    'do not use an online critic'.")
+    print()
+    print("  * ADJUDICATED 2026-09-03 (N=30 policy 2x2 --")
+    print("    research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md): Row 1")
+    print("    confirmed, stronger than predicted -- lagging REMOVES the rank")
+    print("    collapse (lagged_hybrid u-rank ~ ordinary, 30/30), it does not")
+    print("    merely reduce it.  The second prediction was NOT confirmed:")
+    print("    identified (M>=2, split (w_deb,g), EMA-reweighted) does not")
+    print("    transfer in policy (0/30; its propagated U collapses to ~0).")
+    print("    At this benchmark's scale nonstationarity is the dominant")
+    print("    measured policy mechanism; identifiability stands as the")
+    print("    theory + toy result of Parts 1-2, not as a live-policy fix.")
     print()
 
 
