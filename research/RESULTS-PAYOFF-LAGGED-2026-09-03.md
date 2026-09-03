@@ -48,3 +48,48 @@ the tree's Row 1 instruction to test lagging alone).
 - Exact per-seed teacher pairing (gap 0); all arms in one merged table; no arm
   dropped post-hoc. Return is evaluated at 10 eval episodes/seed as recorded by
   the runner.
+
+
+---
+
+## N=30 extension (2026-09-03), pooled adjudication
+
+**Data:** `runs/payoff_lagged_30seed_3600.json` = seeds 0..9 (the N=10 file
+above) merged with seeds 10..29 (identical code/config, run 2026-09-03 via
+`udwm.scripts.run_policy_2x2_split_seeds`; all 20 extension seeds report
+`exact_teacher_match: true`, `max_teacher_checksum_gap: 0.0`).
+**Registration:** N=30 amendment appended to
+`research/PAYOFF-LAGGED-PREREGISTRATION.md` before seeds 10..29 were run.
+
+## Pooled verdicts (n=30, same pre-registered rules, seed bar >= 21/30)
+
+| Prediction | Result at N=30 | Status |
+|---|---|---|
+| P1: mechanism survives 2x horizon (`lagged_hybrid` u-rank ~ ordinary, beats `hybrid`) | u-rank 0.9876 vs ordinary 0.9859 (mean delta +0.0017; 29/30 within -0.02 harm); vs hybrid +0.2731, 30/30, CI [+0.2445, +0.3030] | **confirmed** (unchanged from N=10) |
+| P2: return payoff of `lagged_hybrid` vs `ordinary` | mean delta -44.63, 15/30 better, 95% CI [-102.6, +10.2] | **not demonstrated** (inconclusive; point estimate null-to-negative, CI now excludes large positive payoff) |
+| P3: `hybrid` worst on uncertainty endpoints | u-rank 0.7145 (vs 0.986-0.988), u-rmse 165.6 (vs 23.6-23.8) | **confirmed** |
+
+## Per-arm means (n=30, 3,600 steps)
+
+| arm | final_return | u_rank_corr | w_rank_corr | u_rmse | w_rmse | next_state_mse | selective_rank_corr | selective_recall_bad |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ordinary | -238.90 | 0.9859 | 0.1816 | 23.63 | 0.1667 | 0.3062 | -0.1661 | 0.2667 |
+| hybrid | -255.37 | 0.7145 | 0.2044 | 165.59 | 0.0657 | **0.2112** | -0.0951 | 0.3163 |
+| lagged_hybrid | -300.00 | **0.9876** | 0.2115 | **23.77** | 0.1959 | 0.3035 | -0.1291 | 0.2875 |
+
+## Reading (pooled)
+
+- The mechanism claim is unchanged and stronger: at N=30 and 2x horizon the
+  lagged arm keeps teacher-student u-rank at ordinary level (30/30 vs hybrid,
+  CI excludes zero) while the live-critic hybrid still collapses it.
+- The return question stays open in the same direction as N=10: the pooled
+  point estimate is negative (-44.6), 15/30 seeds favor lagging, and the 95%
+  CI [-102.6, +10.2] is about half the N=10 width. A return payoff claim would
+  need a benchmark where longer horizons reward better world models (the
+  deferred modality choice), not more seeds on DelayedBimodal.
+
+## Registration hygiene (extension)
+
+- Amendment registered (2026-09-03) before seeds 10..29 were launched.
+- Seeds 0..9 rows are identical to the published N=10 file; no arm or seed
+  dropped post-hoc; endpoints unchanged; pooled set adjudicates.

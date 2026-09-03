@@ -15,17 +15,15 @@ under two value maps, not two competing theses.
 | Ground-truth (w*, g*) recovery | First check of the identified loss against ANALYTIC (w*, g*): estimator unbiased; M=1 objective walks the degenerate direction from both inits; equal-weighting hole (w rank 0.40 when g* >> w*) and the partial reweighting fix quantified. | [RESULTS-GROUND-TRUTH-W-G-2026-09-01.md](RESULTS-GROUND-TRUTH-W-G-2026-09-01.md) |
 | Policy 2×2, 5-seed preliminary | Hybrid u-rank collapse reproduces (-0.301, 0/5); lagged critic recovers u-rank at 5 seeds (leans nonstationarity-dominant); identified arm confounded by reweighting hole. Not a verdict. | [RESULTS-POLICY-2X2-2026-09-01.md](RESULTS-POLICY-2X2-2026-09-01.md) |
 | Policy 2×2, N=30 adjudicated rerun | Pre-registered extension to 30 seeds (EMA-reweighted identified arms). **Row 1 of the decision tree**: lagging fixes the u-rank collapse (30/30, to ~ordinary); the identified loss does not (0/30, U collapses to ~0). Nonstationarity is the measured mechanism; identifiability stands as theory. Return: identified arms best, but return does not adjudicate. | [RESULTS-POLICY-2X2-30SEED-2026-09-03.md](RESULTS-POLICY-2X2-30SEED-2026-09-03.md) |
-| Payoff test #4 (lagging alone, 3,600 steps) | Mechanism survival confirmed at 2x horizon (lagged u-rank 0.989 ~ ordinary 0.987; hybrid still collapses 0.704). No return payoff demonstrated (return deltas null-to-negative, wide CIs; MBPO returns drift down past ~1,800 steps on this benchmark). | [RESULTS-PAYOFF-LAGGED-2026-09-03.md](RESULTS-PAYOFF-LAGGED-2026-09-03.md) |
+| Payoff test #4 (lagging alone, 3,600 steps), N=30 | Mechanism survival confirmed (lagged u-rank 0.988 ~ ordinary 0.986 at N=30; vs hybrid +0.273, 30/30). Return payoff still not demonstrated: pooled delta -44.6, 15/30, CI [-102.6, +10.2] (MBPO returns drift down past ~1,800 steps on this benchmark). | [RESULTS-PAYOFF-LAGGED-2026-09-03.md](RESULTS-PAYOFF-LAGGED-2026-09-03.md) |
 
 Estimator notes (not policy tables):
 [ESTIMATOR-BIAS-FINDING.md](ESTIMATOR-BIAS-FINDING.md) (first moment, distribution-free),
 [ESTIMATOR-VARIANCE-FINDING.md](ESTIMATOR-VARIANCE-FINDING.md) (second moment, kurtosis; why the model class can matter).
 
-**Payoff test #4 (2026-09-03):** run at N=10 (3,600 steps, lagging alone):
-mechanism survives, no return payoff demonstrated at this scale
-([RESULTS-PAYOFF-LAGGED-2026-09-03.md](RESULTS-PAYOFF-LAGGED-2026-09-03.md)).
-N=30 precision extension registered 2026-09-03 before running seeds 10..29
-(pooled adjudication on `runs/payoff_lagged_30seed_3600.json`). The open
-question for a payoff claim is the benchmark/protocol (the deferred modality
-choice), not more steps on DelayedBimodal: MBPO returns drift down past ~1,800
-env steps here.
+**Payoff test #4 (2026-09-03):** adjudicated at N=30 (3,600 steps, lagging
+alone): mechanism survives (lagged u-rank 0.988 ~ ordinary 0.986; +0.273 vs
+hybrid, 30/30); return payoff not demonstrated (delta -44.6, 15/30, CI
+[-102.6, +10.2]). The open question for a payoff claim is the
+benchmark/protocol (the deferred modality choice), not more steps on
+DelayedBimodal: MBPO returns drift down past ~1,800 env steps here.
