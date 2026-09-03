@@ -135,9 +135,11 @@ python -m udwm.scripts.run_policy_2x2_split_seeds \
 ```
 Summarize: `python -m udwm.scripts.summarize_policy_2x2 --data runs/policy_identifiability_2x2_30seed.json`.
 
-**Next (registered, 2026-09-03):** payoff test #4 per the tree outcome (Row 1) -
-does lagging alone pay off in policy terms at 2x the horizon (3,600 steps)?
-Protocol: [`research/PAYOFF-LAGGED-PREREGISTRATION.md`](research/PAYOFF-LAGGED-PREREGISTRATION.md).
+**Payoff test #4 (2026-09-03), done:** lagging alone at 2x horizon
+([`research/RESULTS-PAYOFF-LAGGED-2026-09-03.md`](research/RESULTS-PAYOFF-LAGGED-2026-09-03.md),
+protocol [`research/PAYOFF-LAGGED-PREREGISTRATION.md`](research/PAYOFF-LAGGED-PREREGISTRATION.md)).
+Mechanism survival confirmed (lagged u-rank ~ ordinary at 3,600 steps); no
+return payoff demonstrated on this benchmark at this scale.
 
 ---
 
