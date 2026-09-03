@@ -92,6 +92,8 @@ def main(argv=None):
 
     # Paired contrasts.
     print("\npaired contrasts (mean delta, wins/N, bootstrap 95%):")
+    print("  verdict: '+' = confirmed improvement, '-' = confirmed harm,"
+          " '~' = inconclusive (CI or seed-count rule not met)")
     for a, b in CONTRASTS:
         print(f"\n{a} - {b}")
         for e in ENDPOINTS:
@@ -101,16 +103,20 @@ def main(argv=None):
                 continue
             lo, hi = bootstrap_ci(d, args.n_bootstrap)
             wins = int((d > 0).sum())
-            better = ">" if e in HIGHER_IS_BETTER else "<"
-            good = (d > 0).mean() if e in HIGHER_IS_BETTER else (d < 0).mean()
-            verdict = "inconclusive"
-            excludes_zero = (lo > 0) if e in HIGHER_IS_BETTER else (hi < 0)
-            if d.size >= 7 and (wins >= 7 or wins <= 3):
-                if (wins >= 7 and e in HIGHER_IS_BETTER) or (wins <= 3 and e not in HIGHER_IS_BETTER):
-                    verdict = "confirmed" if excludes_zero else "inconclusive"
-                elif excludes_zero:
-                    verdict = "absent"
-            print(f"  {e:<22} mean={d.mean():+12.4f}  wins={wins:>2}/{d.size:<2} 95%[{lo:+10.4f},{hi:+10.4f}]  -> {verdict}")
+            frac_up = (d > 0).mean()
+            higher_better = e in HIGHER_IS_BETTER
+            thr = 0.7
+            verdict = "~ inconclusive"
+            if d.size >= 7:
+                if higher_better and lo > 0 and frac_up >= thr:
+                    verdict = "+ confirmed"
+                elif higher_better and hi < 0 and frac_up <= 1 - thr:
+                    verdict = "- confirmed (harm)"
+                elif (not higher_better) and hi < 0 and (1 - frac_up) >= thr:
+                    verdict = "+ confirmed"
+                elif (not higher_better) and lo > 0 and (1 - frac_up) <= 1 - thr:
+                    verdict = "- confirmed (harm)"
+            print(f"  {e:<22} mean={d.mean():+12.4f}  up={wins:>2}/{d.size:<2} 95%[{lo:+10.4f},{hi:+10.4f}]  -> {verdict}")
 
 
 if __name__ == "__main__":

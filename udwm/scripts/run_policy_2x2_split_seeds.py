@@ -69,7 +69,8 @@ def run_seed(seed: int, args, out: Path) -> int:
     env["PYTHONIOENCODING"] = "utf-8"
     env["OMP_NUM_THREADS"] = str(max(1, int(args.threads)))
     env["MKL_NUM_THREADS"] = str(max(1, int(args.threads)))
-    proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    proc = subprocess.run(cmd, env=env, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
     return proc.returncode
 
 

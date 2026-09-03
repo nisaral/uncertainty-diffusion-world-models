@@ -13,14 +13,16 @@ under two value maps, not two competing theses.
 
 | Ground-truth (w*, g*) recovery | First check of the identified loss against ANALYTIC (w*, g*): estimator unbiased; M=1 objective walks the degenerate direction from both inits; equal-weighting hole (w rank 0.40 when g* >> w*) and the partial reweighting fix quantified. | [RESULTS-GROUND-TRUTH-W-G-2026-09-01.md](RESULTS-GROUND-TRUTH-W-G-2026-09-01.md) |
 | Policy 2×2, 5-seed preliminary | Hybrid u-rank collapse reproduces (-0.301, 0/5); lagged critic recovers u-rank at 5 seeds (leans nonstationarity-dominant); identified arm confounded by reweighting hole. Not a verdict. | [RESULTS-POLICY-2X2-2026-09-01.md](RESULTS-POLICY-2X2-2026-09-01.md) |
+| Policy 2×2, N=30 adjudicated rerun | Pre-registered extension to 30 seeds (EMA-reweighted identified arms). **Row 1 of the decision tree**: lagging fixes the u-rank collapse (30/30, to ~ordinary); the identified loss does not (0/30, U collapses to ~0). Nonstationarity is the measured mechanism; identifiability stands as theory. Return: identified arms best, but return does not adjudicate. | [RESULTS-POLICY-2X2-30SEED-2026-09-03.md](RESULTS-POLICY-2X2-30SEED-2026-09-03.md) |
 
 Estimator notes (not policy tables):
 [ESTIMATOR-BIAS-FINDING.md](ESTIMATOR-BIAS-FINDING.md) (first moment, distribution-free),
 [ESTIMATOR-VARIANCE-FINDING.md](ESTIMATOR-VARIANCE-FINDING.md) (second moment, kurtosis; why the model class can matter).
 
-**Next:** the 10-seed 5-arm 2×2 with `distill_reweight_ema` on the identified
-arms, adjudicated by the pre-registered
-[decision tree](DECISION-TREE-2X2-PREREGISTRATION.md). Toy results: equal
-weights fail on w when g* >> w* (rank 0.40); the EMA fix recovers it (0.97); no
-single scalar weighting gives both w and g relative magnitude, but w ranking is
-robust to the weighting once normalised.
+**Next:** payoff test (#4) per the tree outcome (Row 1): does lagging alone --
+the mechanism that preserves u-rank -- pay off in policy/selective terms at a
+longer horizon? Toy context: equal weights fail on w when g* >> w* (rank
+0.40); the EMA fix recovers it (0.97); but at N=30 in policy the reweighted
+identified arm collapses the propagated U to ~0 (student_u_mean ~ -0.003 vs
+teacher -50..-105), so the toy-level rank-robustness claim does not transfer
+untested.

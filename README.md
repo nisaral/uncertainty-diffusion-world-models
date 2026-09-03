@@ -89,15 +89,16 @@ numerically weak. Not yet reweighted.
 
 ## What comes next
 
-**Preliminary 2x2 (5 seeds, 2026-09-01):** the registered table exists but is
-NOT a verdict. [`runs/policy_identifiability_2x2.json`](runs/policy_identifiability_2x2.json)
-(5 seeds x 5 arms x 1,800 steps, exact teacher pairing) is summarized in
-[`research/RESULTS-POLICY-2X2-2026-09-01.md`](research/RESULTS-POLICY-2X2-2026-09-01.md).
-It reproduces the hybrid u-rank collapse (delta -0.301, 0/5), and at 5 seeds the
-lagged critic fully recovers u-rank, which leans "nonstationarity is the
-dominant measured cause on this benchmark". The identified arm ran with the
-known equal-weighting hole, so its numbers are confounded - no policy verdict.
-The 10-seed rerun is pre-registered with a written decision tree:
+**Policy 2×2, adjudicated at N=30 (2026-09-03):**
+[`research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md`](research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md).
+Pre-registered extension to 30 seeds x 5 arms (exact teacher pairing, gap 0).
+Decision tree **Row 1** is confirmed: `lagged_hybrid` restores teacher-student
+u-rank to ~ordinary (30/30, +0.331), `identified_hybrid` does not (0/30,
+-0.464; its reweighted local (w,g) matching collapses the propagated U to ~0).
+Nonstationarity is the dominant measured policy mechanism; identifiability
+stands as a theoretical result (proof + toy). The 10-seed slice and the
+confounded 5-seed preliminary are kept for continuity but do not adjudicate.
+Data: [`runs/policy_identifiability_2x2_30seed.json`](runs/policy_identifiability_2x2_30seed.json).
 [`research/DECISION-TREE-2X2-PREREGISTRATION.md`](research/DECISION-TREE-2X2-PREREGISTRATION.md).
 
 Ground-truth toy (2026-09-01): [`theory/ground_truth_w_g.py`](theory/ground_truth_w_g.py)

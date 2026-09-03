@@ -2,7 +2,7 @@
 
 Every assumption used in derivations or implementations. Update when proofs or code change.
 
-Last updated: 2026-08-19
+Last updated: 2026-09-03
 
 Active claim: distillation vs ordinary member matching, measured by teacher–student
 \(u,w\) rank correlation and RMSE at fixed \(M\) and NFE.
@@ -65,4 +65,4 @@ Active claim: distillation vs ordinary member matching, measured by teacher–st
 2. Zero epistemic uncertainty (\(N=1\) fixed model) → \(w_t \to 0\), \(u_t \to 0\).
 3. Extreme distillation error (\(K=1\) collapsed sampler) → large B1 bias; \(\hat U\) should not be trusted as teacher-UBE.
 4. Negative population \(u_t\) (Luis toy MRP) → clipping introduces known overestimation. **Compounded by the \(O(1/M)\) MC bias, which can push a genuinely negative \(u^\star\) positive so the clamp never fires and the failure is silent.**
-5. Highly multi-modal \(p(s'\mid s,a)\) with small \(M\) → high variance of \(\hat u\); Bernstein may beat Hoeffding. **Correction (derived, not yet measured): the dominant small-\(M\) error is a *bias*, not variance, and the derivation says it is distribution-free — driven by the magnitude of \(\sigma_i^2\), not by multimodality. The bimodal check in `theory/estimator_bias.py` has NOT been run; until it is, treat "distribution-free" as a prediction.**
+5. Highly multi-modal \(p(s'\mid s,a)\) with small \(M\) → high variance of \(\hat u\); Bernstein may beat Hoeffding. **Correction: the dominant small-\(M\) error is a *bias*, not variance, and it is distribution-free — driven by the magnitude of \(\sigma_i^2\), not by multimodality. The bimodal check in `theory/estimator_bias.py` Part 1 HAS been run (2026-08-29, re-run 2026-09-03): the Gaussian and the symmetric-bimodal law reproduce the same \(O(1/M)\) bias constants to Monte Carlo precision, so "distribution-free" is confirmed for the first moment. The second moment is NOT distribution-free — see `ESTIMATOR-VARIANCE-FINDING.md` (kurtosis; the symmetric-bimodal control with \(\kappa=2.5\) is the benign case).**
