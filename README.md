@@ -79,11 +79,16 @@ construction needs a changing critic, so a lagged target critic is a
 (intervals include 0); RMSE slightly *worse*; 2× sampling cost. That is what
 the theory predicted: a benign stationary map does not force collapse, so this
 study cannot tell the two losses apart. The discriminating experiment is the
-policy 2×2, **registered, not yet reported**.
+policy 2×2, adjudicated at N=30 (2026-09-03):
+[`research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md`](research/RESULTS-POLICY-2X2-30SEED-2026-09-03.md).
 
-Known hole: identified loss currently weights \(\hat w\) and \(\hat g\) equally,
-while \(\hat g\) is ~orders of magnitude larger, so the epistemic term is
-numerically weak. Not yet reweighted.
+Known hole, reweighted and re-measured: the identified loss’s equal
+\((w,g)\) weighting made the epistemic term numerically negligible (g is ~orders
+of magnitude larger). `TermScaleEMA` (`distill_reweight_ema: true`) fixes the
+toy-scale hole (w rank 0.40 → 0.97) but at N=30 in policy the reweighted
+identified arms collapse the propagated U to ~0 (student_u_mean ≈ −0.003 vs
+teacher −50…−105): local u = w − g lands on the \(u_{\min}=0\) floor. See the
+ground-truth write-up and the N=30 results for the bounded-limitation framing.
 
 ---
 
@@ -113,25 +118,26 @@ robust to the weighting once normalised - the hole is a bounded limitation for
 rank-based downstream gating.
 [`research/RESULTS-GROUND-TRUTH-W-G-2026-09-01.md`](research/RESULTS-GROUND-TRUTH-W-G-2026-09-01.md).
 
-Registered policy arms (`ordinary` / `hybrid` / `lagged_hybrid` /
-`identified_hybrid` / `lagged_identified`):
+**N=30 verdict (2026-09-03), registered predictions vs data:**
+1. `lagged_hybrid` “reduces but does not kill” the rank collapse → **confirmed**,
+   and then some: it removes it (u-rank +0.331, 30/30, to ~ordinary).
+2. `identified_hybrid` (live critic) recovers rank → **not confirmed**: 0/30,
+   interval excludes zero; the EMA-reweighted arm collapses U to ~0.
+3. `lagged_identified` best or tied → **not confirmed** on u-rank; lagging
+   directionally helps within identified (20/30, CI excludes 0, below the
+   70% bar). Identified distillation is NOT confirmed in policy.
 
-1. `lagged_hybrid` should **reduce but not kill** the rank collapse (fixes
-   nonstationarity, leaves identifiability).
-2. `identified_hybrid` on the **live** critic is the sharp test: if rank
-   survives, the collapse was identifiability, not nonstationarity.
-3. `lagged_identified` should be best or tied. If lag adds nothing once the
-   target is identified, say so.
-
+Reproduce the adjudicated table (split by seed, then merged):
 ```bash
-python -m udwm.scripts.run_delayed_bimodal_policy_ablation \
-  --variants ordinary hybrid lagged_hybrid identified_hybrid lagged_identified \
-  --seeds 0 1 2
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --seeds 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 \
+  --out runs/policy_identifiability_2x2_30seed.json --jobs 10 --threads 2
 ```
+Summarize: `python -m udwm.scripts.summarize_policy_2x2 --data runs/policy_identifiability_2x2_30seed.json`.
 
-Run the full 5-arm 2x2 at 10 seeds with `distill_reweight_ema: true` on the
-identified arms (see the decision tree for adjudication). Until that re-run, do
-not treat identified distillation as confirmed in policy.
+**Next (registered, 2026-09-03):** payoff test #4 per the tree outcome (Row 1) -
+does lagging alone pay off in policy terms at 2x the horizon (3,600 steps)?
+Protocol: [`research/PAYOFF-LAGGED-PREREGISTRATION.md`](research/PAYOFF-LAGGED-PREREGISTRATION.md).
 
 ---
 
@@ -181,7 +187,7 @@ already exist (MACURA and earlier). This repo does not claim to invent them.
 - Luis UBE Assumptions 1–2 fail here as in Luis’s deep-RL instantiation.
 - \(\sqrt{U}\) is a **score**, not a conformal interval.
 - Top-decile retrieval of high-uncertainty states is **not** established.
-- Policy 2×2 for identified vs hybrid is **not** in yet.
+- Policy 2×2 for identified vs hybrid: adjudicated at N=30 — lagging (not identifiability) is the measured fix; the identified loss does not transfer in policy on this benchmark.
 
 ---
 
