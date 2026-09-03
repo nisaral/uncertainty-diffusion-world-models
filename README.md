@@ -28,23 +28,27 @@ Index: [`research/RESULTS.md`](research/RESULTS.md).
 
 All paired studies below use **exact teacher checksums** (gap 0).
 
-### 1. Fixed value map — 20 seeds
+### 1. Fixed value map — 20 seeds, extended to 30
 
 Protocol: five members, eight paired latents, 1,024-state grid.
 [`research/RESULTS-STRESS-LARGE-2026-08-21.md`](research/RESULTS-STRESS-LARGE-2026-08-21.md),
-reproduced in the identifiability rerun.
+reproduced in the identifiability rerun and extended to 30 seeds
+([`research/RESULTS-STRESS-IDENTIFIED-30SEED-2026-09-03.md`](research/RESULTS-STRESS-IDENTIFIED-30SEED-2026-09-03.md);
+seeds 0–19 byte-identical to the 08-29 file).
 
 Hybrid (single-latent decision loss) vs ordinary member matching:
 
-| Endpoint | Hybrid vs ordinary |
-|---|---|
-| Uncertainty RMSE | better **20/20**; mean Δ −0.00374; 95% [−0.00474, −0.00289] |
-| Rank correlation | better **13/20**; mean Δ +0.0317; 95% [+0.00117, +0.0632] |
-| Top-decile recall | **inconclusive** (9/20; interval includes 0) |
+| Endpoint | Hybrid vs ordinary (20 seeds) | Hybrid vs ordinary (30 seeds) |
+|---|---|---|
+| Uncertainty RMSE (`w_rmse`) | better 20/20; Δ −0.00374; 95% [−0.00474, −0.00289] | better 29/30; Δ −0.00340; 95% [−0.00421, −0.00266] |
+| Rank correlation (`w_deb_rank_corr`) | better 14/20; Δ +0.0167; CI includes 0 | better **24/30**; Δ +0.0555; 95% [+0.0285, +0.0834] |
+| Top-decile recall | **inconclusive** (9/20; interval includes 0) | **inconclusive** (16/30; interval just touches 0) |
 
 Diagnostics on the same run: **epistemic** fidelity (`w_deb`) improves, **aleatoric**
 fidelity (`g`) degrades, on the decision arms. The loss is reallocating variance
-between the two terms, not preserving the split.
+between the two terms, not preserving the split. Identified vs hybrid on the
+fixed map stays a ranking wash at 30 seeds (slightly worse magnitude at 2×
+cost); the policy 2×2 is the discriminating experiment.
 
 ### 2. Live SAC critic — 10 seeds × 1,800 steps
 
@@ -75,7 +79,7 @@ ours is cross-member disagreement). Cite that paper. Nothing in the
 construction needs a changing critic, so a lagged target critic is a
 **different** fix (nonstationarity), not this one.
 
-**Identified vs hybrid on the same fixed-map 20 seeds:** ranking wash
+**Identified vs hybrid on the fixed map (20 seeds, confirmed at 30):** ranking wash
 (intervals include 0); RMSE slightly *worse*; 2× sampling cost. That is what
 the theory predicted: a benign stationary map does not force collapse, so this
 study cannot tell the two losses apart. The discriminating experiment is the

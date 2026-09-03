@@ -268,92 +268,112 @@ def part3_adaptive_ranking() -> None:
     m_probe, m_max, refine_frac = 2, 12, 0.5
     k = int(refine_frac * n_states)
 
-    # --- probe pass: every state at m_probe.  These estimates are what the
-    #     implementation KEEPS for states it decides not to refine.
+    # --- probe pass: every state at m_probe. Under sample-split these draws are
+    #     used ONLY for selection; reported scores are redrawn independently.
     u_pr_naive, u_pr_deb, w_pr = estimate_per_state(
         mus, sig2, np.full(n_states, m_probe), rng
     )
 
-    # selection on the NOISY probe w -- what adaptive_mc.estimate actually does
+    # selection on the NOISY probe w -- what adaptive_mc.estimate does
     refine = np.zeros(n_states, dtype=bool)
     refine[np.argsort(w_pr)[-k:]] = True
     # selection on the TRUE w -- counterfactual that isolates selection noise
     oracle = np.zeros(n_states, dtype=bool)
     oracle[np.argsort(w_s)[-k:]] = True
 
-    m_adapt = np.where(refine, m_max, m_probe)
+    def adaptive(mask, split):
+        """One adaptive draw -> (u_naive, u_deb, cost_per_state).
 
-    def adaptive_with(mask):
-        """Refined states are redrawn at m_max; unrefined keep the probe estimate.
-
-        Matching the implementation here is essential: _member_stats issues a
-        fresh independent draw for the refined subset and the probe estimate
-        survives untouched elsewhere.  Reusing an estimate that was also used to
-        SELECT introduces a winner's-curse bias on top of the 1/M bias, and the
-        two are separate failure modes -- debiasing removes only the second.
+        Mirrors AdaptiveMCUBELocalRewards.estimate:
+          - probe pass at m_probe for ALL states (selection only under split),
+          - refined states are redrawn FRESH at m_max,
+          - unrefined states are redrawn FRESH at m_probe when split=True,
+            otherwise they keep the probe estimate (biased reuse mode).
+        Cost counts every sample actually drawn, including the selection probe
+        that refined states throw away.
         """
         u_n, u_d = u_pr_naive.copy(), u_pr_deb.copy()
-        idx = np.nonzero(mask)[0]
-        r_n, r_d, _ = estimate_per_state(mus[idx], sig2[idx], np.full(idx.size, m_max), rng)
-        u_n[idx], u_d[idx] = r_n, r_d
-        return u_n, u_d
+        cost = np.full(n_states, float(m_probe))
+        r_idx = np.nonzero(mask)[0]
+        if r_idx.size:
+            r_n, r_d, _ = estimate_per_state(
+                mus[r_idx], sig2[r_idx], np.full(r_idx.size, m_max), rng
+            )
+            u_n[r_idx], u_d[r_idx] = r_n, r_d
+            cost[r_idx] = m_probe + m_max   # selection probe + fresh report
+        if split:
+            u_idx = np.nonzero(~mask)[0]
+            if u_idx.size:
+                s_n, s_d, _ = estimate_per_state(
+                    mus[u_idx], sig2[u_idx], np.full(u_idx.size, m_probe), rng
+                )
+                u_n[u_idx], u_d[u_idx] = s_n, s_d
+                cost[u_idx] = m_probe + m_probe  # selection probe + fresh report
+        return u_n, u_d, cost
 
-    u_ad_naive, u_ad_deb = adaptive_with(refine)
-    u_or_naive, u_or_deb = adaptive_with(oracle)
+    # reuse-probe: the biased low-cost mode (sample_split=False)
+    u_re_naive, u_re_deb, cost_re = adaptive(refine, split=False)
+    # sample-split: repo default since 2026-08-19 (sample_split=True)
+    u_ss_naive, u_ss_deb, cost_ss = adaptive(refine, split=True)
+    # oracle selection with the split reporting (isolates selection noise)
+    u_or_naive, u_or_deb, _ = adaptive(oracle, split=True)
 
-    # --- uniform baselines at comparable and at max cost
-    m_equal = int(round(m_adapt.mean()))
-    u_eq_naive, u_eq_deb, _ = estimate_per_state(mus, sig2, np.full(n_states, m_equal), rng)
-    u_mx_naive, u_mx_deb, _ = estimate_per_state(mus, sig2, np.full(n_states, m_max), rng)
+    # --- uniform baselines at MATCHED total cost (samples actually drawn)
+    m_eq_re = int(round(cost_re.mean()))
+    m_eq_ss = int(round(cost_ss.mean()))
+    u_eq_re_deb, _, _ = estimate_per_state(
+        mus, sig2, np.full(n_states, m_eq_re), rng
+    )
+    u_eq_ss_deb, _, _ = estimate_per_state(
+        mus, sig2, np.full(n_states, m_eq_ss), rng
+    )
+    u_mx_deb, _, _ = estimate_per_state(mus, sig2, np.full(n_states, m_max), rng)
 
     print("=" * 78)
-    print("PART 3 — does adaptive M help or hurt the uncertainty ranking?")
+    print("PART 3 - does adaptive M help or hurt the uncertainty ranking?")
     print("=" * 78)
     print(f"{n_states} states, N={n_members}, m_probe={m_probe}, m_max={m_max}, "
           f"refine_frac={refine_frac}")
-    print(f"mean samples/state: adaptive={m_adapt.mean():.1f}  uniform={m_equal}  max={m_max}")
     print()
-    print(f"{'scheme':<34} {'mean M':>7} {'spearman(u_hat,u*)':>20} {'MAE(u_hat,u*)':>15}")
+    print("  cost accounting (samples actually drawn per state, current code paths):")
+    print(f"    reuse-probe  (sample_split=False): probe {m_probe} on all + redraw "
+          f"{m_max} on refined")
+    print(f"       -> mean {cost_re.mean():.1f}/state (the refined selection probe is discarded)")
+    print(f"    sample-split (sample_split=True, repo default): probe {m_probe} on all +")
+    print(f"       redraw {m_max} on refined + redraw {m_probe} on unrefined")
+    print(f"       -> mean {cost_ss.mean():.1f}/state")
+    print()
+    print(f"{'scheme':<46} {'cost':>6} {'spearman(u,u*)':>15} {'MAE(u,u*)':>10}")
     rows = [
-        ("uniform M, naive", m_equal, u_eq_naive),
-        ("adaptive M, naive  <-- repo", m_adapt.mean(), u_ad_naive),
-        ("uniform M=m_max, naive", m_max, u_mx_naive),
-        ("uniform M, debiased", m_equal, u_eq_deb),
-        ("adaptive M, debiased", m_adapt.mean(), u_ad_deb),
-        ("adaptive M, debiased, ORACLE sel", m_adapt.mean(), u_or_deb),
+        ("uniform M=%d, debiased (matched to split cost)" % m_eq_ss, m_eq_ss, u_eq_ss_deb),
+        ("adaptive sample-split, debiased  <-- repo", cost_ss.mean(), u_ss_deb),
+        ("adaptive reuse-probe, debiased (biased low-cost mode)", cost_re.mean(), u_re_deb),
+        ("uniform M=%d, debiased (matched to reuse cost)" % m_eq_re, m_eq_re, u_eq_re_deb),
+        ("adaptive sample-split, naive", cost_ss.mean(), u_ss_naive),
+        ("adaptive reuse-probe, naive", cost_re.mean(), u_re_naive),
         ("uniform M=m_max, debiased", m_max, u_mx_deb),
+        ("adaptive sample-split + ORACLE sel, debiased", cost_ss.mean(), u_or_deb),
     ]
     for name, mm, est in rows:
         rho = spearman(est, u_s)
         mae = float(np.abs(est - u_s).mean())
-        print(f"{name:<34} {mm:7.1f} {rho:20.4f} {mae:15.4f}")
+        print(f"{name:<46} {mm:6.1f} {rho:15.4f} {mae:10.4f}")
+    d_ss = spearman(u_ss_deb, u_s)
+    d_re = spearman(u_re_deb, u_s)
+    d_or = spearman(u_or_deb, u_s)
     print()
-
-    # --- mechanism 1: the 1/M bias differs across the refine boundary
-    b_lo = predicted_bias(n_members, float(g_s[~refine].mean()), m_probe)[2]
-    b_hi = predicted_bias(n_members, float(g_s[refine].mean()), m_max)[2]
-    print("  mechanism 1 -- heterogeneous 1/M bias (removable):")
-    print(f"    bias added to unrefined states (M={m_probe}):  {b_lo:+.4f}")
-    print(f"    bias added to refined   states (M={m_max}): {b_hi:+.4f}")
-    print(f"    differential (refined shifted vs unrefined):  {b_hi - b_lo:+.4f}")
-    print("    -> refined states get a SMALLER inflation than the ones skipped,")
-    print("       pushing high-uncertainty states DOWN relative to low ones.")
-    print("       Debiasing per-state at the M actually spent removes this exactly.")
-    print()
-
-    # --- mechanism 2: selection on a noisy statistic (NOT removable by debiasing)
-    d_probe = spearman(u_ad_deb, u_s)
-    d_oracle = spearman(u_or_deb, u_s)
-    print("  mechanism 2 -- winner's curse from selecting on the noisy probe w:")
-    print(f"    spearman, debiased + probe-w selection:  {d_probe:.4f}")
-    print(f"    spearman, debiased + true-w  selection:  {d_oracle:.4f}")
-    print(f"    gap attributable to selection noise:     {d_oracle - d_probe:+.4f}")
-    print("    -> unrefined states keep the very estimate that selected them, so")
-    print("       their u is conditioned on a low w draw.  Debiasing corrects the")
-    print("       mean at a GIVEN M; it cannot undo conditioning on the draw.")
-    print("       Fixing this needs a sample-splitting probe (select on one half,")
-    print("       report from the other) -- not yet implemented.")
-    print()
+    print("  -> sample-splitting (repo default) removes the winner's-curse")
+    print("     CONDITIONING: unrefined scores are redrawn independently of the")
+    print("     probe that selected them. Its measured effect on the ranking here")
+    print(f"     is small (debiased spearman {d_re:.4f} -> {d_ss:.4f}); the dominant")
+    print("     residual versus uniform at matched cost is the variance term A/M from")
+    print("     heterogeneous M, which is NOT removable by the debias (see")
+    print("     ESTIMATOR-VARIANCE-FINDING.md).")
+    print(f"  -> probe-w selection still beats true-w selection under the split")
+    print(f"     ({d_ss:.4f} vs {d_or:.4f}): a noisy probe is likelier to read high when g")
+    print("     is large, so it accidentally refines high-aleatoric states -- closer to")
+    print("     the Neyman allocation than oracle-w selection. Same sign inversion as")
+    print("     documented in ESTIMATOR-BIAS-FINDING.md section 0.")
 
 
 # ---------------------------------------------------------------------------
