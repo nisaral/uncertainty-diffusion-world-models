@@ -140,6 +140,7 @@ def gradient_postmortem(trainer, seed_batch=1):
             m_latents=wm.m_latents,
             value_weight=1.0, variance_weight=1.0, aleatoric_weight=1.0,
             normalize_values=wm.normalize_values, reweight=False,
+            corruption=getattr(wm, "corruption", "schedule"),
         )
         report = {}
         for name in ("member", "value_geometry", "epistemic_w", "aleatoric_g"):
@@ -195,6 +196,7 @@ def main(argv=None):
     base = load_config(args.config)
     if args.device is not None:
         base["device"] = args.device
+    overrides = {}
     if args.set:
         for item in args.set.split(","):
             key, value = item.split("=", 1)
@@ -206,10 +208,12 @@ def main(argv=None):
                     parsed = float(value)
                 except ValueError:
                     parsed = value
-            base["model"][key.strip()] = parsed
+            overrides[key.strip()] = parsed
     steps = int(args.steps)
     prepared_buffer, prepared_teacher = prepare_matched_teacher(base, args.seed, steps)
     cfg = make_cfg(base, args.variant, args.seed, steps)
+    # --set must win over the VARIANTS defaults, so apply it AFTER make_cfg.
+    cfg["model"].update(overrides)
     set_seed(args.seed)
     trainer = MBPOTrainer(cfg)
     trainer.real_buffer = copy.deepcopy(prepared_buffer)

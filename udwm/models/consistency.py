@@ -408,6 +408,228 @@ def identified_decision_distill_loss(
     normalize_values: bool = False,
     reweight: bool = False,
     normalizer: Optional[TermScaleEMA] = None,
+    corruption: str = "schedule",
+) -> Dict[str, torch.Tensor]:
+    """Decision-aware distillation with an *identified* uncertainty target.
+
+    ``corruption`` chooses where the value statistics that the epistemic and
+    aleatoric terms match are evaluated:
+
+    - ``"schedule"``: random schedule corruptions of the batch next-state
+      (max injected-noise std ~= 0.28 on the 8-step schedule). Historical
+      behaviour; bit-identical when nothing changes.
+    - ``"pure"``: eval-equivalent pure-noise latents x_T ~ N(0,I) shared
+      across members. The student maps them in one 1-NFE step exactly as at
+      eval time; the frozen teacher decodes them with its multi-step DDIM.
+      The aleatoric term's gradient then acts on the object that decides the
+      eval-time g (the corruption-distribution lever).
+    - ``"maxt"``: schedule corruption at the maximum timestep (t = T-1) with
+      the one-step analytic teacher target; intermediate diagnostic between
+      ``schedule`` and ``pure``.
+
+    The member/state-geometry anchor terms stay on random schedule corruptions
+    in every mode so the student's mean dynamics are unchanged.
+
+    The identifiability motivation is unchanged: matching the single-latent
+    statistic ``w* + (g* - Sigma_bar)`` is one equation in two unknowns, and
+    drawing ``m_latents >= 2`` and matching the debiased ``w`` and the
+    aleatoric ``g`` as two separate terms removes that direction. This is the
+    ensemble analogue of the variance correction Voelcker et al.
+    (arXiv:2505.22772) use for a value-aware model loss under a sampled model.
+    """
+    if corruption == "schedule":
+        return _identified_schedule_loss(
+            student, teacher, obs, actions, next_obs, value_fn, rewards,
+            m_latents, value_weight, variance_weight, aleatoric_weight,
+            state_geometry_weight, state_pairwise_weight, normalize_values,
+            reweight, normalizer,
+        )
+    if corruption in ("pure", "maxt"):
+        return _identified_decision_corruption_loss(
+            student, teacher, obs, actions, next_obs, value_fn, rewards,
+            m_latents, value_weight, variance_weight, aleatoric_weight,
+            state_geometry_weight, state_pairwise_weight, normalize_values,
+            reweight, normalizer, corruption,
+        )
+    raise ValueError("unknown corruption mode: %r" % corruption)
+
+
+def _identified_decision_corruption_loss(
+    student: ConsistencyStudent,
+    teacher: DiffusionDynamicsEnsemble,
+    obs: torch.Tensor,
+    actions: torch.Tensor,
+    next_obs: torch.Tensor,
+    value_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    rewards: Optional[torch.Tensor] = None,
+    m_latents: int = 2,
+    value_weight: float = 1.0,
+    variance_weight: float = 1.0,
+    aleatoric_weight: float = 1.0,
+    state_geometry_weight: float = 0.0,
+    state_pairwise_weight: float = 0.0,
+    normalize_values: bool = False,
+    reweight: bool = False,
+    normalizer: Optional[TermScaleEMA] = None,
+    corruption: str = "pure",
+) -> Dict[str, torch.Tensor]:
+    """Identified loss whose decision (w/g/geometry) terms are evaluated at a
+    different corruption distribution than the member anchor.
+
+    ``pure``: per latent, one shared x_T ~ N(0,I) is decoded by every member --
+    the student in one NFE (t_scaled = 1), the frozen teacher by its multi-step
+    DDIM -- exactly the pairing the eval-time decomposition uses, so the
+    aleatoric term's gradient acts on eval-time g directly.
+    ``maxt``: the decision terms are evaluated at the max-noise schedule
+    timestep with the one-step analytic teacher target (valid because x_t is a
+    real corruption of the batch next-state).
+    """
+    teacher.eval()
+    m = max(2, int(m_latents))
+    b = obs.shape[0]
+    device = obs.device
+    n = student.ensemble_size
+    pure = corruption == "pure"
+    delta = next_obs - obs
+    x0_data = teacher._pack_x(delta, rewards if teacher.joint_reward else None)
+
+    # Loop 1: member / state-geometry anchors at random schedule corruptions
+    # (dynamics anchor; identical to the schedule path's member terms).
+    member_sq, state_geom_sq, state_pair_sq = [], [], []
+    for _ in range(m):
+        t_idx = torch.randint(0, teacher.diffusion_steps, (b,), device=device)
+        noise = torch.randn_like(x0_data)
+        sqrt_ab = teacher.schedule.sqrt_alpha_bar[t_idx].unsqueeze(-1)
+        sqrt_om = teacher.schedule.sqrt_one_minus_alpha_bar[t_idx].unsqueeze(-1)
+        x_t = sqrt_ab * x0_data + sqrt_om * noise
+        t_scaled = (t_idx.float() + 1.0) / teacher.diffusion_steps
+        t_x0, s_x0 = [], []
+        for i in range(n):
+            with torch.no_grad():
+                eps = teacher.members[i](x_t, t_scaled, obs, actions)
+                ab = teacher.schedule.alpha_bar[t_idx].unsqueeze(-1)
+                target = (x_t - torch.sqrt(1.0 - ab) * eps) / (torch.sqrt(ab) + 1e-8)
+            t_x0.append(target.detach())
+            s_x0.append(student.forward_member(i, x_t, t_scaled, obs, actions))
+        t_all = torch.stack(t_x0, dim=0)
+        s_all = torch.stack(s_x0, dim=0)
+        member_sq.append(F.mse_loss(s_all, t_all))
+        state_geom_sq.append(F.mse_loss(
+            s_all - s_all.mean(dim=0, keepdim=True),
+            t_all - t_all.mean(dim=0, keepdim=True),
+        ))
+        state_pair_sq.append(F.mse_loss(
+            (s_all[:, None] - s_all[None, :]).pow(2).mean(dim=-1),
+            (t_all[:, None] - t_all[None, :]).pow(2).mean(dim=-1),
+        ))
+
+    # Loop 2: decision values at the decision corruption (pure noise or maxt).
+    t_vals, s_vals = [], []
+    expanded = actions.unsqueeze(0).expand(n, -1, -1)
+    for _ in range(m):
+        t_x0, s_x0 = [], []
+        for i in range(n):
+            if pure:
+                z = torch.randn(b, teacher.x_dim, device=device)  # shared latent
+                with torch.no_grad():
+                    tx0 = teacher._ddim_sample_member(i, obs, actions, x_T=z)
+                t_x0.append(tx0.detach())
+                s_x0.append(student.forward_member(
+                    i, z, torch.ones(b, device=device), obs, actions))
+            else:  # maxt: schedule corruption at t = T - 1
+                t_idx = torch.full(
+                    (b,), teacher.diffusion_steps - 1, device=device, dtype=torch.long
+                )
+                noise = torch.randn_like(x0_data)
+                sqrt_ab = teacher.schedule.sqrt_alpha_bar[t_idx].unsqueeze(-1)
+                sqrt_om = teacher.schedule.sqrt_one_minus_alpha_bar[t_idx].unsqueeze(-1)
+                x_t = sqrt_ab * x0_data + sqrt_om * noise
+                t_scaled = torch.ones(b, device=device)
+                with torch.no_grad():
+                    eps = teacher.members[i](x_t, t_scaled, obs, actions)
+                    ab = teacher.schedule.alpha_bar[t_idx].unsqueeze(-1)
+                    target = (x_t - torch.sqrt(1.0 - ab) * eps) / (torch.sqrt(ab) + 1e-8)
+                t_x0.append(target.detach())
+                s_x0.append(student.forward_member(i, x_t, t_scaled, obs, actions))
+        t_all = torch.stack(t_x0, dim=0)
+        s_all = torch.stack(s_x0, dim=0)
+        t_next = obs.unsqueeze(0) + teacher._unpack_x(t_all)[0]
+        s_next = obs.unsqueeze(0) + teacher._unpack_x(s_all)[0]
+        with torch.no_grad():
+            t_vals.append(value_fn(t_next, expanded))
+        s_vals.append(value_fn(s_next, expanded))
+
+    t_value = torch.stack(t_vals, dim=1)                      # [N,M,B,1]
+    s_value = torch.stack(s_vals, dim=1)
+    if normalize_values:
+        loc = t_value.mean().detach()
+        scale = t_value.std(unbiased=False).detach().clamp_min(1e-6)
+        t_value = (t_value - loc) / scale
+        s_value = (s_value - loc) / scale
+
+    t_w, t_g = coupled_w_g(t_value, m)
+    s_w, s_g = coupled_w_g(s_value, m)
+    if reweight and normalizer is not None:
+        w_scale = normalizer.update("w", t_w)
+        g_scale = normalizer.update("g", t_g)
+    else:
+        w_scale = g_scale = torch.ones((), device=t_w.device)
+    t_mu, s_mu = t_value.mean(dim=1), s_value.mean(dim=1)
+    t_center = t_mu - t_mu.mean(dim=0, keepdim=True)
+    s_center = s_mu - s_mu.mean(dim=0, keepdim=True)
+
+    member = torch.stack(member_sq).mean()
+    state_geometry = torch.stack(state_geom_sq).mean()
+    state_pairwise = torch.stack(state_pair_sq).mean()
+    value_geometry = F.mse_loss(s_center, t_center)
+    epistemic = F.mse_loss(s_w, t_w.detach()) * w_scale
+    aleatoric = F.mse_loss(s_g, t_g.detach()) * g_scale
+    total = (
+        member
+        + float(value_weight) * value_geometry
+        + float(variance_weight) * epistemic
+        + float(aleatoric_weight) * aleatoric
+        + float(state_geometry_weight) * state_geometry
+        + float(state_pairwise_weight) * state_pairwise
+    )
+    return {
+        "total": total,
+        "member": member,
+        "value_geometry": value_geometry,
+        "epistemic_w": epistemic,
+        "aleatoric_g": aleatoric,
+        "state_geometry": state_geometry,
+        "state_pairwise": state_pairwise,
+        "teacher_w_mean": t_w.mean().detach(),
+        "student_w_mean": s_w.mean().detach(),
+        "teacher_g_mean": t_g.mean().detach(),
+        "student_g_mean": s_g.mean().detach(),
+        "teacher_local_u_mean": (t_w - t_g).mean().detach(),
+        "student_local_u_mean": (s_w - s_g).mean().detach(),
+        "w_scale": w_scale.detach(),
+        "g_scale": g_scale.detach(),
+        "m_latents": torch.tensor(float(m), device=device),
+    }
+
+
+def _identified_schedule_loss(
+
+    student: ConsistencyStudent,
+    teacher: DiffusionDynamicsEnsemble,
+    obs: torch.Tensor,
+    actions: torch.Tensor,
+    next_obs: torch.Tensor,
+    value_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    rewards: Optional[torch.Tensor] = None,
+    m_latents: int = 2,
+    value_weight: float = 1.0,
+    variance_weight: float = 1.0,
+    aleatoric_weight: float = 1.0,
+    state_geometry_weight: float = 0.0,
+    state_pairwise_weight: float = 0.0,
+    normalize_values: bool = False,
+    reweight: bool = False,
+    normalizer: Optional[TermScaleEMA] = None,
 ) -> Dict[str, torch.Tensor]:
     """Decision-aware distillation with an *identified* uncertainty target.
 
@@ -545,6 +767,7 @@ class DistilledWorldModel(nn.Module):
         aleatoric_weight: float = 1.0,
         reweight_ema: bool = False,
         reweight_floor: float = 1e-6,
+        corruption: str = "schedule",
     ) -> None:
         super().__init__()
         self.teacher = teacher
@@ -570,6 +793,7 @@ class DistilledWorldModel(nn.Module):
         self.aleatoric_weight = float(aleatoric_weight)
         self.reweight_ema = bool(reweight_ema)
         self.scale_ema = TermScaleEMA(floor=float(reweight_floor)) if reweight_ema else None
+        self.corruption = corruption
         self.teacher_frozen = False
 
     def freeze_teacher(self) -> None:
@@ -605,6 +829,7 @@ class DistilledWorldModel(nn.Module):
                 normalize_values=self.normalize_values,
                 reweight=self.reweight_ema,
                 normalizer=self.scale_ema,
+                corruption=self.corruption,
             )
             s_loss = parts["total"]
         elif self.decision_weight > 0.0 and value_fn is not None:
