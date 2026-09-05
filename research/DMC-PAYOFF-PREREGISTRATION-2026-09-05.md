@@ -19,6 +19,36 @@ object improves return on a benchmark with genuine long-horizon structure -
 the deferred modality question. DMC (low-dimensional state vectors, long
 episodes where model error compounds) is the right-sized move before pixels.
 
+## Amendment 1 (2026-09-05, after the DelayedBimodal corrected-weight N=10 result)
+
+The corrected-weight N=10 policy study
+(`research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md`, registered before
+running) landed Branch A on DelayedBimodal: equal-weight identified transfers
+under the live critic (u-rank 0.835, 9/10 >= 0.70; +0.214 vs hybrid, 10/10;
++0.720 vs the EMA arms, 10/10; -0.104 vs ordinary and -0.120 vs
+lagged_hybrid, 0/10). This is **partial transfer, not parity**. This
+registration is amended accordingly, before any DMC run:
+
+1. **Three conditions, not two.** The DMC comparison distinguishes (i) the
+   baseline `ordinary`/`lagged_hybrid` (full u-rank ~0.94-0.96 on
+   DelayedBimodal), (ii) the `identified_hybrid` EMA collapse control
+   (expected u-rank ~ noise), and (iii) `identified_eq` as its own arm, the
+   equal-weight partial-transfer candidate. `identified_eq` is expected to sit
+   above `hybrid` and the EMA arms but below `ordinary`/`lagged_hybrid`;
+   DMC adjudicates whether the partial-transfer story confirms (same ordering)
+   or complicates (gap closes to parity, or transfer fails entirely).
+2. **Return-payoff thread merged here.** Return has been null at every
+   DelayedBimodal scale tested (3,600-step payoff, N=30; corrected-weight
+   N=10: inconclusive everywhere). No further toy-scale return registration
+   will be opened; DMC's long horizon is the same experiment that can resolve
+   regime transfer and whether preserved u-rank cashes into return at once.
+3. **Gate protocol concretized.** Run the pilot seeds {0, 1} with the
+   `ordinary` arm only (same runner/protocol as the main study); per-seed
+   gate ratio = `row.teacher_g_mean / row.teacher_w_mean` (live SAC critic,
+   real-buffer eval states; reader `udwm/scripts/dmc_gate_ratio.py`).
+   Median across the pilot seeds decides the regime below. Gate must pass
+   before the full comparison is launched.
+
 ## Diagnostic gate (mandatory, first)
 
 Before running the full comparison, measure the teacher's `g*/w*` ratio under
@@ -55,13 +85,17 @@ candidate; the EMA arm remains as the control that reproduces the collapse.
   trainer smoke has run (no dm_control on this machine); the GPU-host smoke
   checklist in `RUN_ON_GPU.md` (Kaggle quickstart, step 3) is the blocking
   check before the gate.
-- Arms: `ordinary`, `hybrid`, `lagged_hybrid`, `identified_hybrid` (EMA,
-  expected collapse if gate is aleatoric), `identified_eq` (corrected-weight
-  candidate). 3,600 env steps (the payoff protocol), MBPO SAC.
+- Arms (three conditions, Amendment 1): `ordinary`, `hybrid`,
+  `lagged_hybrid` (baseline); `identified_hybrid` (EMA collapse control);
+  `identified_eq` (equal-weight partial-transfer candidate, run as its own
+  arm). 3,600 env steps (the payoff protocol), MBPO SAC.
 - Seeds: 30 for verdicts; endpoints and thresholds identical to the
   DelayedBimodal payoff protocol (`return_mean` delta with paired 95% CI and
-  per-seed sign counts; `u_rank_corr`; `next_state_mse`; selective
-  recall/risk).
+  per-seed sign counts; `u_rank_corr`; `u_rmse`; `w_rmse`; `next_state_mse`;
+  selective recall/risk). `identified_eq` DMC bars mirror the DelayedBimodal
+  study: u_rank >= 0.70 on >= 70% of seeds AND u_rank beats `hybrid` on
+  >= 70% of seeds (confirm); the gap to `ordinary`/`lagged_hybrid` is
+  reported as the partial-transfer magnitude.
 - Pre-commitment: report every endpoint for every arm; no post-hoc arm
   addition. Multiple-comparisons statement as in `PAPER-NARRATIVE.md`.
 

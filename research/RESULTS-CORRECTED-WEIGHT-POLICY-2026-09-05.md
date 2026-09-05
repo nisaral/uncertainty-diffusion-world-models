@@ -90,6 +90,12 @@ The story now has a measured policy-level spine, not just a probe:
    weight hole on w persists at policy scale; w_rmse 0.995 vs ordinary
    0.497), and equal-weight identified's next-state MSE is worse than the
    EMA arms (0.24 vs 0.16) but better than ordinary (0.28) at this N.
+   Speculation (unmeasured): w_rank transfers (0.213 vs ordinary 0.215)
+   while w_rmse doubles, consistent with the balance-window picture - at
+   g*/w* ~ 1e4 the g-channel dominates the shared student parameters, so w
+   is matched in ordering but not in level (student w ~50x teacher in the
+   probe); the decision object u ~ -g is carried by the recovered aleatoric
+   scale, so the miscalibrated w level is not the binding cost for ranking.
 
 Implication for the registered DMC gate (research/DMC-PAYOFF-PREREGISTRATION-
 2026-09-05.md): the pre-registration stands as written - identified_eq is the

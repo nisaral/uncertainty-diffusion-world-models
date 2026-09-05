@@ -205,10 +205,11 @@ contract (diagnostic gate first: measure g*/w* under the DMC critic, then run
 the comparison with the pre-committed arms). Kaggle images ship
 `dm_control`/`mujoco`, which this machine does not have (`gymnasium` only).
 
-1. Register before running: the DMC pre-registration is committed; any change
-   to arms/endpoints/seeds needs a new registration before compute is spent.
-2. Repo does not have `setup.py`; on the Kaggle host export PYTHONPATH and
-   install extras:
+1. Register before running: the DMC pre-registration (incl. Amendment 1) is
+   committed; any change to arms/endpoints/seeds needs a new registration
+   before compute is spent.
+2. Repo has no `setup.py`; on the Kaggle host export PYTHONPATH and install
+   extras:
    ```bash
    git clone https://github.com/nisaral/uncertainty-diffusion-world-models
    cd uncertainty-diffusion-world-models
@@ -216,11 +217,23 @@ the comparison with the pre-committed arms). Kaggle images ship
    export PYTHONPATH=$PWD
    python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
    ```
-3. Add the DMC env adapter under `udwm/envs/registry.py` (`dmc.<task>` id) -
-   the only missing piece - then run the policy runners with `--device cuda`
-   and `--gpu-ids` for seed parallelism. Adjudicate decisive rows on CPU
-   afterwards (CUDA is not bit-identical to CPU in this repo; see top of file).
-4. If the gate says aleatoric-dominated, run the `identified_eq` arm (equal
-   weight) as the uncertainty-preserving candidate and keep
-   `identified_hybrid` (EMA) as the expected-collapse control; do NOT carry
-   lambda/LR scaling as a promising arm (that thread closed 2026-09-05).
+3. Create the task config from `configs/delayed_bimodal_distill.yaml`
+   (`env.id: dm_control/<task>` - `udwm/envs/registry.py` already routes these
+   ids through shimmy; set `max_episode_steps >= 500` and `gamma ~0.99`).
+4. Run the staged launcher in order - stage0 smoke, stage1 gate (mandatory,
+   prints teacher g*/w* regime; stage2 refuses to start without it), stage2
+   main comparison seed-parallel over GPUs, stage3 CPU adjudication:
+   ```bash
+   TASK=dm_control/hopper-hop-v0 CONFIG=configs/dmc_hopper_distill.yaml \
+     GPU_IDS=0,1 ./dmc_payoff.sh stage0
+   TASK=dm_control/hopper-hop-v0 CONFIG=configs/dmc_hopper_distill.yaml \
+     GPU_IDS=0,1 ./dmc_payoff.sh stage1
+   TASK=dm_control/hopper-hop-v0 CONFIG=configs/dmc_hopper_distill.yaml \
+     GPU_IDS=0,1 SEEDS="0 .. 29" OUT=runs/dmc_payoff_30seed_gpu.json \
+     ./dmc_payoff.sh stage2
+   ./dmc_payoff.sh stage3   # after copying the GPU json to a CPU box
+   ```
+   `identified_eq` runs as its own arm (Amendment 1: three conditions -
+   baseline, EMA-collapse control, equal-weight partial-transfer candidate).
+   Do NOT carry lambda/LR scaling as a promising arm (thread closed 2026-09-05).
+   Adjudicate decisive rows on CPU afterwards (CUDA is not bit-identical).
