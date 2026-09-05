@@ -21,6 +21,8 @@ model, **not** conformal coverage, and **not** a SOTA control claim.
 Theory: [`theory/distill_identifiability.py`](theory/distill_identifiability.py).  
 Write-up: [`research/RESULTS-IDENTIFIABILITY-2026-08-29.md`](research/RESULTS-IDENTIFIABILITY-2026-08-29.md).  
 Index: [`research/RESULTS.md`](research/RESULTS.md).
+Mechanism of the identified-arm policy collapse: [`research/U-COLLAPSE-MECHANISM-2026-09-05.md`](research/U-COLLAPSE-MECHANISM-2026-09-05.md).
+Paper-shaped assembly: [`research/PAPER-NARRATIVE.md`](research/PAPER-NARRATIVE.md).
 Reproduction: [`REPRODUCE.md`](REPRODUCE.md).  GPU: [`RUN_ON_GPU.md`](RUN_ON_GPU.md).
 
 ---
@@ -100,8 +102,7 @@ Known hole, reweighted and re-measured: the identified loss’s equal
 of magnitude larger). `TermScaleEMA` (`distill_reweight_ema: true`) fixes the
 toy-scale hole (w rank 0.40 → 0.97) but at N=30 in policy the reweighted
 identified arms collapse the propagated U to ~0 (student_u_mean ≈ −0.003 vs
-teacher −50…−105): local u = w − g lands on the \(u_{\min}=0\) floor. See the
-ground-truth write-up and the N=30 results for the bounded-limitation framing.
+teacher −50…−105): local u = w - g is not clamped in the eval object; the measured mechanism (2026-09-05, [`research/U-COLLAPSE-MECHANISM-2026-09-05.md`](research/U-COLLAPSE-MECHANISM-2026-09-05.md)) is that the local object here is aleatoric-dominated (teacher g/w ~ 1e4 under the SAC critic), the identified loss matches w but leaves g at initialization (the aleatoric gradient's measured leverage on g is ~2e-6 per update, ~1e6-1e7 steps short of the gap in a 180-update run), so u ~ w ~ 0. See the ground-truth write-up and the N=30 results doc for the bounded-limitation framing.
 
 ---
 

@@ -55,6 +55,7 @@ def evaluate_distillation_uncertainty(
     student_proxy = distilled_world_model
     est = MCUBELocalRewards(u_min=-1e9, m_samples=max(2, int(m_samples)), debias=True)
     teacher_u, student_u, teacher_w, student_w = [], [], [], []
+    teacher_g, student_g = [], []
     bound_gaps, bound_rhs, differential_rms = [], [], []
     for _ in range(int(n_batches)):
         batch = buffer.sample(batch_size)
@@ -108,9 +109,12 @@ def evaluate_distillation_uncertainty(
         student_u.append(s["u"].reshape(-1).cpu().numpy())
         teacher_w.append(t["w"].reshape(-1).cpu().numpy())
         student_w.append(s["w"].reshape(-1).cpu().numpy())
+        teacher_g.append(t["g"].reshape(-1).cpu().numpy())
+        student_g.append(s["g"].reshape(-1).cpu().numpy())
 
     tu, su = np.concatenate(teacher_u), np.concatenate(student_u)
     tw, sw = np.concatenate(teacher_w), np.concatenate(student_w)
+    tg, sg = np.concatenate(teacher_g), np.concatenate(student_g)
     report = {
         "n": float(tu.size),
         "u_rank_corr": _rank_corr(tu, su),
@@ -121,6 +125,10 @@ def evaluate_distillation_uncertainty(
         "w_rmse": float(np.sqrt(np.mean((tw - sw) ** 2))),
         "teacher_u_mean": float(np.mean(tu)),
         "student_u_mean": float(np.mean(su)),
+        "teacher_w_mean": float(np.mean(tw)),
+        "student_w_mean": float(np.mean(sw)),
+        "teacher_g_mean": float(np.mean(tg)),
+        "student_g_mean": float(np.mean(sg)),
     }
     if bound_gaps:
         gaps = np.concatenate(bound_gaps)

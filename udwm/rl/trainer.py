@@ -279,6 +279,9 @@ class MBPOTrainer:
             "distill_guard_fired", "distill_decision_scale",
             "distill_epistemic_w", "distill_aleatoric_g",
             "distill_teacher_w_mean", "distill_student_w_mean",
+            "distill_teacher_g_mean", "distill_student_g_mean",
+            "distill_teacher_local_u_mean", "distill_student_local_u_mean",
+            "distill_w_scale", "distill_g_scale",
         ):
             if key in last_out:
                 info[key] = float(last_out[key].item())

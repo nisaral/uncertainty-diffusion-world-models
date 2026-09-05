@@ -386,6 +386,10 @@ class TermScaleEMA:
         sc = max(self._scale[name], self.floor)
         return torch.tensor(1.0 / (sc * sc), dtype=batch_stat.dtype, device=batch_stat.device)
 
+    def snapshot(self) -> Dict[str, float]:
+        """Copy of current per-name EMA scales, for diagnostics/logging."""
+        return dict(self._scale)
+
 
 def identified_decision_distill_loss(
     student: ConsistencyStudent,
@@ -507,6 +511,12 @@ def identified_decision_distill_loss(
         "state_pairwise": state_pairwise,
         "teacher_w_mean": t_w.mean().detach(),
         "student_w_mean": s_w.mean().detach(),
+        "teacher_g_mean": t_g.mean().detach(),
+        "student_g_mean": s_g.mean().detach(),
+        "teacher_local_u_mean": (t_w - t_g).mean().detach(),
+        "student_local_u_mean": (s_w - s_g).mean().detach(),
+        "w_scale": w_scale.detach(),
+        "g_scale": g_scale.detach(),
         "m_latents": torch.tensor(float(m), device=device),
     }
 

@@ -93,3 +93,21 @@ pooled file; seed 9 was re-run at the same thread setting as the rest of the
 table (it had first run as a single-seed crash probe at default threads).
 - All five arms ran per seed with one prepared teacher (checksum gap 0); no
 arm dropped post-hoc.
+
+## Correction (2026-09-05): the mechanism note above mis-described the eval object
+
+The "lands on the `u_min = 0` floor" sentence above is **not** what the eval
+endpoint measures: `evaluate_distillation_uncertainty` uses
+`MCUBELocalRewards(u_min=-1e9, ...)`, so the reported `u` is unclamped. The
+measured mechanism (probe data `runs/probe_u_*.json`, write-up
+`U-COLLAPSE-MECHANISM-2026-09-05.md`) is: the local object on this benchmark is
+aleatoric-dominated (teacher u ~ -g with g ~ 73-90 vs w ~ 0.005); identified
+arms match the epistemic half (student w ~ teacher w, w_rmse best in table)
+but leave the aleatoric half at initialization (student g ~ 0.01, student
+latent-to-state spread ~0.006 vs teacher ~0.37), so u_student ~ w_student ~ 0.
+The aleatoric term cannot lift g: measured per-update leverage ~2e-6, ~100x
+below its 2-latent estimator noise and ~1e6-1e7 steps short of the gap, in a
+run with 180 student updates; EMA reweighting then down-weights the aleatoric
+gradient by a further ~1e5-1e6. Not EMA lag (lagged_identified collapses
+identically), not the reweighting (equal-weight identified collapses), not the
+u-floor. The verdicts of this table are unchanged.
