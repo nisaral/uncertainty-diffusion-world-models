@@ -21,7 +21,7 @@ model, **not** conformal coverage, and **not** a SOTA control claim.
 Theory: [`theory/distill_identifiability.py`](theory/distill_identifiability.py).  
 Write-up: [`research/RESULTS-IDENTIFIABILITY-2026-08-29.md`](research/RESULTS-IDENTIFIABILITY-2026-08-29.md).  
 Index: [`research/RESULTS.md`](research/RESULTS.md).
-Reproduction: [`REPRODUCE.md`](REPRODUCE.md).
+Reproduction: [`REPRODUCE.md`](REPRODUCE.md).  GPU: [`RUN_ON_GPU.md`](RUN_ON_GPU.md).
 
 ---
 
@@ -154,6 +154,10 @@ Mechanism survival confirmed at N=30 (lagged u-rank 0.988 ~ ordinary 0.986,
 CI [-102.6, +10.2]).
 
 ---
+
+## Running on GPU
+
+Published rows are CPU-verified (checksum-exact). The runners accept `--device cuda` and the seed-split driver pins workers to GPUs with `--gpu-ids`; CUDA rows are not bit-identical to CPU rows, so keep them in separate `_cuda` files. Full guide: [`RUN_ON_GPU.md`](RUN_ON_GPU.md).
 
 ## Install and checks
 

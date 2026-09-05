@@ -152,8 +152,14 @@ def main(argv=None):
     parser.add_argument("--variants", nargs="+", choices=list(VARIANTS), default=list(VARIANTS))
     parser.add_argument("--out", default="runs/delayed_bimodal_policy_ablation.json")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--device", default=None,
+                        help="override config device (cpu/cuda); default: config value")
     args = parser.parse_args(argv)
     base = load_config(args.config)
+    if args.device is not None:
+        if args.device == "cuda" and not torch.cuda.is_available():
+            raise SystemExit("--device cuda requested but torch.cuda.is_available() is False")
+        base["device"] = args.device
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     rows = []

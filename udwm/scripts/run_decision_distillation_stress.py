@@ -306,8 +306,12 @@ def main(argv=None):
         default=["ordinary", "state_geometry", "decision_geometry", "decision_hybrid"],
     )
     parser.add_argument("--out", default="runs/decision_distillation_stress.json")
+    parser.add_argument("--device", default="cpu",
+                        help="cpu or cuda (errors if cuda is unavailable)")
     args = parser.parse_args(argv)
-    device = torch.device("cpu")
+    if args.device == "cuda" and not torch.cuda.is_available():
+        raise SystemExit("--device cuda requested but torch.cuda.is_available() is False")
+    device = torch.device(args.device)
     rows = []
     for seed in args.seeds:
         obs, actions, next_obs = make_dataset(seed, args.data_size, device)

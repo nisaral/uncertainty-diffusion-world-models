@@ -49,7 +49,7 @@ def seed_complete(path: Path, variants) -> bool:
     return {r["variant"] for r in rows} >= set(variants)
 
 
-def run_seed(seed: int, args, out: Path) -> int:
+def run_seed(seed: int, args, out: Path, gpu_id=None) -> int:
     cmd = [
         sys.executable,
         "-m",
@@ -65,7 +65,11 @@ def run_seed(seed: int, args, out: Path) -> int:
         "--out",
         str(seed_file(out, seed)),
     ]
+    if args.device is not None:
+        cmd += ["--device", args.device]
     env = dict(os.environ)
+    if gpu_id is not None:
+        env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     env["PYTHONIOENCODING"] = "utf-8"
     env["OMP_NUM_THREADS"] = str(max(1, int(args.threads)))
     env["MKL_NUM_THREADS"] = str(max(1, int(args.threads)))
@@ -84,10 +88,22 @@ def main(argv=None) -> None:
     parser.add_argument("--out", default="runs/policy_identifiability_2x2_10seed.json")
     parser.add_argument("--jobs", type=int, default=10)
     parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument("--device", default=None,
+                        help="device override passed to each seed (cpu/cuda); default: config value")
+    parser.add_argument("--gpu-ids", default=None,
+                        help="comma list of CUDA device ids cycled across seed workers; implies --device cuda")
     parser.add_argument("--keep-partials", action="store_true")
     parser.add_argument("--existing", default=None,
                         help="canonical JSON whose rows are merged for seeds without partial files")
     args = parser.parse_args(argv)
+
+    gpu_ids = None
+    if args.gpu_ids:
+        gpu_ids = [g.strip() for g in args.gpu_ids.split(",") if g.strip()]
+        if not gpu_ids:
+            raise SystemExit("--gpu-ids must be a comma list, e.g. 0,1")
+        if args.device is None:
+            args.device = "cuda"
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -102,8 +118,10 @@ def main(argv=None) -> None:
     print(f"[split] {len(args.seeds) - len(pending)} seeds already available; {len(pending)} pending")
 
     if pending:
-        def worker(seed: int) -> int:
-            rc = run_seed(seed, args, out)
+        def worker(seed: int, gpu_id) -> int:
+            if gpu_id is not None:
+                print(f"[split] seed {seed} -> cuda:{gpu_id}")
+            rc = run_seed(seed, args, out, gpu_id)
             if rc != 0:
                 raise SystemExit(f"[split] seed {seed} failed with exit {rc}")
             print(f"[split] seed {seed} done")
@@ -112,8 +130,13 @@ def main(argv=None) -> None:
         n_jobs = max(1, min(int(args.jobs), len(pending)))
         print(f"[split] launching {len(pending)} seeds across {n_jobs} workers "
               f"({args.threads} torch threads each)")
+        if gpu_ids and n_jobs > len(gpu_ids):
+            print(f"[split] note: {n_jobs} workers > {len(gpu_ids)} GPUs; several seeds share a device, use --jobs <= #gpus to avoid contention")
         with ThreadPoolExecutor(max_workers=n_jobs) as pool:
-            futures = [pool.submit(worker, s) for s in pending]
+            futures = [
+                pool.submit(worker, s, gpu_ids[i % len(gpu_ids)] if gpu_ids else None)
+                for i, s in enumerate(pending)
+            ]
             for fut in as_completed(futures):
                 fut.result()
 
@@ -139,6 +162,8 @@ def main(argv=None) -> None:
             "out": str(out),
             "resume": False,
             "driver": "run_policy_2x2_split_seeds.py (per-seed batches, merged)",
+            "device": args.device if args.device else "config",
+            "gpu_ids": gpu_ids,
         },
         "rows": rows,
         "teacher_pairing": build_pairing(rows),

@@ -1,10 +1,11 @@
 # Reproduce every table
 
-All runners are CPU-only by default (`device: cpu` in every config). No GPU is
-required for any published number. The fixed-map stress runner pins
-`torch.device("cpu")`; the policy runners take `--config` if you want to point
-them at a `device: cuda` config, but CUDA is not bit-identical to the CPU runs
-below, so published rows should be reproduced on CPU.
+All runners default to CPU (`device: cpu` in every config) and every
+published number was produced on CPU. All runners also accept `--device
+cuda`, but CUDA is not bit-identical to the CPU runs below, so published
+rows should be reproduced on CPU.
+
+GPU variant of any command below: add `--device cuda` (stress and policy runners) or, for seed-parallel policy runs on several GPUs, `--jobs <#gpus> --gpu-ids 0,1,...` on the split driver. CUDA rows are not bit-identical to CPU rows, so GPU runs are for speed/exploration only -- published numbers come from CPU. See `RUN_ON_GPU.md`.
 
 ## Environment and quick checks
 
