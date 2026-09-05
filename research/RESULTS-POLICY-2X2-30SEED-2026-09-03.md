@@ -111,3 +111,18 @@ run with 180 student updates; EMA reweighting then down-weights the aleatoric
 gradient by a further ~1e5-1e6. Not EMA lag (lagged_identified collapses
 identically), not the reweighting (equal-weight identified collapses), not the
 u-floor. The verdicts of this table are unchanged.
+
+## Addendum (2026-09-05): the identified rows were the EMA-reweighted variant
+
+The identified arms in this table ran with the per-term EMA reweighting on
+(config-override bug; see `CORRUPTION-PROBE-PREREGISTRATION-2026-09-05.md`
+and `RESULTS-CORRUPTION-2026-09-05.md`). The postscript above was written
+under that config and its "not the reweighting (equal-weight identified
+collapses)" sentence is superseded. The registered corrected-weight policy
+N-study (`research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md`, N=10)
+shows the equal-weight identified arm transfers under the live critic:
+u-rank 0.835 (9/10 >= 0.70, pre-registered bars A met), +0.214 vs hybrid
+(10/10), +0.720 vs identified_hybrid (10/10), -0.104 vs ordinary. Row 1 of
+the decision tree (lagging fixes the collapse) stands; the "identified loss
+does not recover u-rank (0/30)" cell is specific to the EMA variant, and
+the equal-weight identified arm does recover u-rank at N=10.

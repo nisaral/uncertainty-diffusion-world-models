@@ -117,6 +117,15 @@ dominant measured mechanism; the identifiability pathology stands as a
 theoretical result (proof + toy) with no measured policy benefit here. The
 payoff test should test lagging alone.
 
+(2026-09-05 addendum: the identified rows in Section 5 ran EMA-reweighted.
+The corrected-weight N=10 policy study
+(research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md, registered before
+running) shows equal-weight identified transfers to the live critic - u-rank
+0.835, 9/10 >= 0.70, pre-registered bars A met; +0.214 vs hybrid (10/10),
++0.720 vs the EMA arms (10/10), -0.104 vs ordinary. "Identifiability has no
+measured policy benefit" is superseded for the equal-weight arm; the EMA
+normaliser, not the identified target, was the policy-scale pathology.)
+
 ## 6. Mechanism of the identified-arm policy collapse (thread #1; corrected 2026-09-05)
 
 The prior 30-seed doc attributed the collapse to "u = w - g landing on the
@@ -157,6 +166,12 @@ per-term EMA reweighting on. The corrected picture
    (research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md) is the out-of-sample
    test of this envelope.
 
+(2026-09-05 policy-level confirmation: the corrected-weight N=10 study meets
+both pre-registered bars - equal-weight identified u-rank 0.835 (9/10 >= 0.70),
++0.720 vs identified_hybrid (10/10), +0.214 vs hybrid (10/10), -0.104 vs
+ordinary. Equal-weight transfer is real but partial: lagged_hybrid (0.955)
+remains the best ranker and ordinary (0.939) still beats eq by ~0.10.)
+
 ## 7. Payoff test (#4): mechanism survives 2x horizon, return payoff does not
 
 Registered test of lagging alone at 3,600 steps (2x the 2x2 horizon), N=30:
@@ -195,7 +210,10 @@ was declared to require a new registration before the run.
   Kalweit), a new UBE recursion, calibrated/conformal coverage, policy SOTA,
   or a done story for the identified loss in policy.
 - The identified-loss policy study at N=30 is not "finished" as a positive;
-  it is finished as an adjudicated negative on this benchmark.
+  it is finished as an adjudicated negative on this benchmark (2026-09-05:
+  superseded for the equal-weight identified arm - the corrected-weight N=10
+  study meets its pre-registered transfer bars; the EMA-variant negative
+  stands and is now attributed to the EMA normaliser, see Section 6).
 - Resolved sub-thread (mechanism): the "why does the identified loss remove
   latent sensitivity" question is a weighting question, not a corruption
   question -- equal-weight identified keeps the pure-noise mapping
