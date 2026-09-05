@@ -189,6 +189,8 @@ def main(argv=None):
                              "distill_reweight_ema=false,distill_m_latents=4")
     parser.add_argument("--save", default=None,
                         help="optional checkpoint path for the trained trainer")
+    parser.add_argument("--student-lr", type=float, default=1e-3,
+                        help="Adam learning rate for the student optimizer")
     args = parser.parse_args(argv)
     base = load_config(args.config)
     if args.device is not None:
@@ -213,7 +215,9 @@ def main(argv=None):
     trainer.real_buffer = copy.deepcopy(prepared_buffer)
     trainer.world_model.teacher.load_state_dict(prepared_teacher)
     trainer.world_model.freeze_teacher()
-    trainer.wm_opt = torch.optim.Adam(trainer.world_model.student.parameters(), lr=1e-3)
+    trainer.wm_opt = torch.optim.Adam(
+        trainer.world_model.student.parameters(), lr=args.student_lr
+    )
     result = trainer.train()
     q_fn = trainer.agent.q_min
     policy_fn = lambda states: trainer.agent.policy_tensor(states, deterministic=True)

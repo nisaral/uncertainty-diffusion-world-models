@@ -22,6 +22,7 @@ Theory: [`theory/distill_identifiability.py`](theory/distill_identifiability.py)
 Write-up: [`research/RESULTS-IDENTIFIABILITY-2026-08-29.md`](research/RESULTS-IDENTIFIABILITY-2026-08-29.md).  
 Index: [`research/RESULTS.md`](research/RESULTS.md).
 Mechanism of the identified-arm policy collapse: [`research/U-COLLAPSE-MECHANISM-2026-09-05.md`](research/U-COLLAPSE-MECHANISM-2026-09-05.md).
+Leverage-fix negative (naive fix does not help): [`research/RESULTS-LEVERAGE-FIX-2026-09-05.md`](research/RESULTS-LEVERAGE-FIX-2026-09-05.md).
 Paper-shaped assembly: [`research/PAPER-NARRATIVE.md`](research/PAPER-NARRATIVE.md).
 Reproduction: [`REPRODUCE.md`](REPRODUCE.md).  GPU: [`RUN_ON_GPU.md`](RUN_ON_GPU.md).
 

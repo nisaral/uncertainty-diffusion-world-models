@@ -86,6 +86,7 @@ class MBPOTrainer:
         self.distill_teacher_pretrain_updates = mcfg.get("distill_teacher_pretrain_updates")
         if self.distill_teacher_pretrain_updates is not None:
             self.distill_teacher_pretrain_updates = int(self.distill_teacher_pretrain_updates)
+        self.distill_grad_clip = float(mcfg.get("distill_grad_clip", 10.0))
         # Number of successful teacher optimizer updates.  This guards against
         # freezing the teacher before it has received any gradient update when
         # the first model-training call happens at the warmup boundary.
@@ -255,7 +256,7 @@ class MBPOTrainer:
                     )
             self.wm_opt.zero_grad()
             out["total"].backward()
-            torch.nn.utils.clip_grad_norm_(self.world_model.parameters(), 10.0)
+            torch.nn.utils.clip_grad_norm_(self.world_model.parameters(), self.distill_grad_clip)
             self.wm_opt.step()
             if (
                 self.distill_two_stage

@@ -113,3 +113,52 @@ All models in this lab are small MLPs (hidden 16-256) with batch sizes
 64-1024. Any modern GPU fits everything; no memory tuning is needed. If you
 later add an image encoder/decoder (the deferred modality step), that is where
 VRAM budgeting starts.
+
+## Mechanism probe and leverage sweep (2026-09-05 tooling)
+
+`udwm/scripts/probe_u_collapse.py` re-runs one policy arm and logs the
+identified-loss trajectory plus an eval-time (w, g, u, coupling, latent-spread)
+decomposition. It accepts the same `--device` and `--set` (model-config
+overrides) plus `--student-lr` and `--save`:
+
+```bash
+# single arm on GPU (slower than CPU at this lab's scale; exploration only)
+python -m udwm.scripts.probe_u_collapse --variant identified_hybrid --seed 0 \
+  --steps 1800 --device cuda --out runs/probe_u_x.json
+
+# leverage-sweep cell (the A/B arms of RESULTS-LEVERAGE-FIX-2026-09-05.md)
+python -m udwm.scripts.probe_u_collapse --variant identified_hybrid --seed 0 \
+  --set distill_reweight_ema=false,distill_aleatoric_weight=1e4,distill_grad_clip=1000.0 \
+  --student-lr 0.01 --steps 1800 --out runs/probe_u_lrscale_B1_s0.json
+```
+
+Seed-parallel GPU sweep: use the committed `probe_sweep_gpu.sh`
+(one worker per GPU, trimmed with `jobs -pr` so the worker count stays at the
+GPU count over any number of seeds):
+
+```bash
+VARIANT=identified_hybrid SEEDS="0 1 2 3" GPU_IDS="0 1" ./probe_sweep_gpu.sh
+# optional: SET="distill_reweight_ema=false,distill_aleatoric_weight=1e4,distill_grad_clip=1000.0" STUDENT_LR=0.01
+```
+
+## Kaggle / cloud GPU quickstart (future DMC-scale work)
+
+The reviewer-endorsed next benchmark is a long-horizon low-dimensional task
+(e.g. a DMC/MuJoCo-scale env) - not pixels. Kaggle images ship
+`dm_control`/`mujoco`, which this machine does not have (`gymnasium` only), so
+Kaggle is the right place for it. Rules to keep the repo's discipline intact:
+
+1. **Register before running**: write the pre-registration (endpoint,
+   threshold, seed count, arms, decided before reading any row) into
+   `research/` and commit it before spending compute.
+2. Kaggle cell (run after uploading this repo or `git clone`):
+   ```bash
+   pip install -e . 2>/dev/null || true   # repo has no setup.py; use PYTHONPATH
+   export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+   python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
+   python -m udwm.scripts.run_delayed_bimodal_policy_ablation --help   # CPU smoke
+   ```
+3. For DMC-scale runs use the policy runners with `--device cuda`; adjudicate
+   decisive rows on CPU afterwards (CUDA is not bit-identical; see above).
+4. If the DMC study includes the identified loss, check the value map first:
+   the leverage-fix result says this failure needs g >> w under the critic.

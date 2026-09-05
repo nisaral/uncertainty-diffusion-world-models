@@ -154,3 +154,20 @@ rises.
 - The fixed-map stress (value map ~O(1), w and g comparable) does not exhibit
   this failure mode; that is consistent: the pathology needs g >> w, which
   only the live-SAC value map produces at this scale.
+
+## Addendum (2026-09-05): naive leverage fixes do not help
+
+Registered experiment (`LEVERAGE-FIX-PREREGISTRATION-2026-09-05.md`, results
+`RESULTS-LEVERAGE-FIX-2026-09-05.md`, data `runs/probe_u_lrscale_*.json`):
+scaling the aleatoric loss by lambda_g in {1e2, 1e4} at clip 10/1e3 is inert
+under Adam (A arms, g unchanged at ~0.013); giving the aleatoric-dominated
+gradient a 10x-100x larger student learning rate drives g **down** to 0
+(B arms: g 0.003 -> exactly 0.0 at lr=0.1, delta-spread 0.0000), replicated
+on seeds 0-1. M=8 latents does not help. Leverage starvation is therefore not
+solely a step-size artifact: the student parks at the g=0 non-negativity
+boundary, where the within-member variance is exactly flat, because the
+2-latent training-time estimator noise (~100x the coherent signal) drives the
+walk into the boundary. The remaining lever is the objective's corruption
+distribution (evaluate the w/g terms at pure-noise t_scaled=1 corruptions),
+not its weights or step size. Thread closed as diagnosis + confirmed dead end
+for the naive fix.
