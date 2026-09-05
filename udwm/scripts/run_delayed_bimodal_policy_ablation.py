@@ -70,6 +70,39 @@ VARIANTS = {
         "distill_normalize_values": False,
         "distill_guard_enabled": False,
     },
+    # --- corrected-weight identified arms (2026-09-05) ---------------------
+    # Historical "identified_*" arms ran with the EMA reweighting on (see
+    # CORRUPTION-PROBE-PREREGISTRATION-2026-09-05.md): --set overrides were
+    # applied before make_cfg and VARIANTS re-applied distill_reweight_ema.
+    # Under EMA-both the aleatoric channel is annihilated (g -> ~0.01, u-rank
+    # ~ noise) while w is matched.  Equal-weight identified recovers g (u-rank
+    # ~0.9 at probe scale) at the cost of the known w hole (w ~50x inflated).
+    # identified_wonly up-weights only the epistemic term (w_scale ~ 1e5) with
+    # the aleatoric term at weight 1; probe results: g still collapses, i.e.
+    # the epistemic up-weighting itself is the collapse driver.
+    "identified_eq": {
+        "distill_decision_weight": 1.0,
+        "distill_value_variance_weight": 1.0,
+        "distill_identified": True,
+        "distill_m_latents": 2,
+        "distill_aleatoric_weight": 1.0,
+        "distill_reweight_ema": False,
+        "distill_use_target_critic": False,
+        "distill_normalize_values": False,
+        "distill_guard_enabled": False,
+    },
+    "identified_wonly": {
+        "distill_decision_weight": 1.0,
+        "distill_value_variance_weight": 1.0,
+        "distill_identified": True,
+        "distill_m_latents": 2,
+        "distill_aleatoric_weight": 1.0,
+        "distill_reweight_ema": True,
+        "distill_reweight_w_only": True,
+        "distill_use_target_critic": False,
+        "distill_normalize_values": False,
+        "distill_guard_enabled": False,
+    },
     "lagged_identified": {
         # Both corrections together: the intended method.
         "distill_decision_weight": 1.0,
