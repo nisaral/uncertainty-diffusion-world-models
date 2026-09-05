@@ -29,27 +29,29 @@ Reproduction: [`REPRODUCE.md`](REPRODUCE.md).  GPU: [`RUN_ON_GPU.md`](RUN_ON_GPU
 
 All paired studies below use **exact teacher checksums** (gap 0).
 
-### 1. Fixed value map — 20 seeds, extended to 30
+### 1. Fixed value map — 20 seeds, extended to 50
 
 Protocol: five members, eight paired latents, 1,024-state grid.
 [`research/RESULTS-STRESS-LARGE-2026-08-21.md`](research/RESULTS-STRESS-LARGE-2026-08-21.md),
-reproduced in the identifiability rerun and extended to 30 seeds
-([`research/RESULTS-STRESS-IDENTIFIED-30SEED-2026-09-03.md`](research/RESULTS-STRESS-IDENTIFIED-30SEED-2026-09-03.md);
-seeds 0–19 byte-identical to the 08-29 file).
+reproduced in the identifiability rerun and extended to 50 seeds
+([`research/RESULTS-STRESS-IDENTIFIED-30SEED-2026-09-03.md`](research/RESULTS-STRESS-IDENTIFIED-30SEED-2026-09-03.md)
+and
+[`research/RESULTS-STRESS-IDENTIFIED-50SEED-2026-09-05.md`](research/RESULTS-STRESS-IDENTIFIED-50SEED-2026-09-05.md);
+seeds 0–29 byte-identical to the 09-03 file).
 
 Hybrid (single-latent decision loss) vs ordinary member matching:
 
-| Endpoint | Hybrid vs ordinary (20 seeds) | Hybrid vs ordinary (30 seeds) |
-|---|---|---|
-| Uncertainty RMSE (`w_rmse`) | better 20/20; Δ −0.00374; 95% [−0.00474, −0.00289] | better 29/30; Δ −0.00340; 95% [−0.00421, −0.00266] |
-| Rank correlation (`w_deb_rank_corr`) | better 14/20; Δ +0.0167; CI includes 0 | better **24/30**; Δ +0.0555; 95% [+0.0285, +0.0834] |
-| Top-decile recall | **inconclusive** (9/20; interval includes 0) | **inconclusive** (16/30; interval just touches 0) |
+| Endpoint | Hybrid vs ordinary (20 seeds) | at 30 seeds | at 50 seeds |
+|---|---|---|---|
+| Uncertainty RMSE (`w_rmse`) | better 20/20; Δ −0.00374 | better 29/30; Δ −0.00340 | better **49/50**; Δ −0.00283; 95% [−0.00347, −0.00223] |
+| Rank correlation (`w_deb_rank_corr`) | better 14/20; Δ +0.0167; CI includes 0 | better 24/30; Δ +0.0555 | better **38/50**; Δ +0.0449; 95% [+0.0231, +0.0665] |
+| Top-decile recall | **inconclusive** (9/20) | **inconclusive** (16/30) | **inconclusive** by seed-count bar (27/50 < 35/50); mean CI [+0.0012, +0.0456] just excludes 0 |
 
 Diagnostics on the same run: **epistemic** fidelity (`w_deb`) improves, **aleatoric**
 fidelity (`g`) degrades, on the decision arms. The loss is reallocating variance
 between the two terms, not preserving the split. Identified vs hybrid on the
-fixed map stays a ranking wash at 30 seeds (slightly worse magnitude at 2×
-cost); the policy 2×2 is the discriminating experiment.
+fixed map stays a ranking wash at 50 seeds (slightly worse magnitude at 2×
+cost; see the 50-seed doc); the policy 2×2 is the discriminating experiment.
 
 ### 2. Live SAC critic — 10 seeds × 1,800 steps
 

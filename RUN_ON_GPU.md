@@ -19,6 +19,15 @@ anything, re-run the decisive rows on CPU with the `REPRODUCE.md` commands.
   `python -m udwm.scripts.benchmark_throughput --device cuda` reports
   teacher-vs-student sampling seconds per batch on the device you name.
 
+## Measured on this machine (RTX 4050 Laptop, 6 GB, 2026-09-05)
+
+`benchmark_throughput --batch-size 256` reports the diffusion sampler is
+**2-6x slower on CUDA than on this machine's CPU** (tiny MLPs: kernel
+launch + WDDM overhead dominate at batch 256; see
+`research/RESULTS-GPU-VALIDATION-2026-09-05.md`). Consequence: run the
+current DelayedBimodal lab on CPU; treat the GPU path as validated-but-not-faster until a workload (image-scale modality) makes the diffusion
+model dominate wall time.
+
 ## Prerequisites
 
 ```bash

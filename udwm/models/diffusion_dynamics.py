@@ -125,6 +125,17 @@ class DiffusionDynamicsEnsemble(nn.Module):
         self.schedule.to(device)
         return self
 
+    def _apply(self, fn, recurse=True):
+        super()._apply(fn, recurse)
+        self.schedule.betas = fn(self.schedule.betas)
+        self.schedule.alphas = fn(self.schedule.alphas)
+        self.schedule.alpha_bar = fn(self.schedule.alpha_bar)
+        self.schedule.sqrt_alpha_bar = fn(self.schedule.sqrt_alpha_bar)
+        self.schedule.sqrt_one_minus_alpha_bar = fn(
+            self.schedule.sqrt_one_minus_alpha_bar
+        )
+        return self
+
     @torch.no_grad()
     def update_stats(
         self, obs: torch.Tensor, next_obs: torch.Tensor, rewards: Optional[torch.Tensor] = None
