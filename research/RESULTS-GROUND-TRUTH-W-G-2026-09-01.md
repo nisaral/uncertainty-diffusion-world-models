@@ -118,3 +118,29 @@ rerun measures it in policy.
   arms, adjudicated by the pre-registered decision tree
   (`research/DECISION-TREE-2X2-PREREGISTRATION.md`).
 - Payoff test (#4) after the tree, testing the mechanism the tree confirms.
+## Addendum (2026-09-05): re-adjudication - EMA "fixes" w and annihilates g
+
+The original write-up adjudicated the EMA normaliser on `w` alone and called
+it "the fix". Re-reading the stored `runs/ground_truth_w_g.json` for **both**
+channels (tables reprinted by `theory/identified_balance_window.py`):
+
+| part | arm | w_rank | g_rank | g_hat_mean | g* |
+|---|---|---:|---:|---:|---:|
+| P1 benign | identified (M=2, equal) | 0.934 | 0.901 | 6.0 | 46.2 |
+| P1 benign | identified + EMA | 0.993 | 0.403 | ~0.0 | 46.2 |
+| P2 collapsed | identified (equal) | 0.894 | 0.807 | 19.9 | 46.2 |
+| P2 collapsed | identified + EMA | 0.992 | -0.506 | ~0.0 | 46.2 |
+| P3 hole (g* >> w*) | identified (equal) | 0.396 | 0.966 | 1821.7 | 3966.2 |
+| P3 hole | identified_rw | 0.608 | 0.175 | 0.4 | 3966.2 |
+| P3 hole | identified + EMA | 0.973 | 0.100 | ~0.0 | 3966.2 |
+
+The EMA normaliser recovers `w` (0.97-0.99) and drives `g` to zero (g_rank
+~0.1-0.4 or negative; g_hat ~ 0.03-0.4 vs g* 46-3966) - the same collapse the
+policy study saw on the real stack, latent in the toy all along. Equal-weight
+identified recovers `g` (g_rank 0.81-0.97) at the cost of `w` at the hole
+(w_rank 0.40 when g* >> w*). No single scalar weight in P4's sweep recovers
+both magnitudes at g* >> w* (only w rank is robust there); the balance window
+for recovering BOTH components exists only when g*/w* is moderate
+(`theory/identified_balance_window.py` P0 gives the estimator-noise scaling
+that sets the window). Write-ups that cite this document for "EMA is the fix"
+should be read with this addendum.

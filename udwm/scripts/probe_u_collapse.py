@@ -141,6 +141,7 @@ def gradient_postmortem(trainer, seed_batch=1):
             value_weight=1.0, variance_weight=1.0, aleatoric_weight=1.0,
             normalize_values=wm.normalize_values, reweight=False,
             corruption=getattr(wm, "corruption", "schedule"),
+            reweight_w_only=getattr(wm, "reweight_w_only", False),
         )
         report = {}
         for name in ("member", "value_geometry", "epistemic_w", "aleatoric_g"):

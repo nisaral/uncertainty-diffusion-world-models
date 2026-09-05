@@ -141,24 +141,86 @@ VARIANT=identified_hybrid SEEDS="0 1 2 3" GPU_IDS="0 1" ./probe_sweep_gpu.sh
 # optional: SET="distill_reweight_ema=false,distill_aleatoric_weight=1e4,distill_grad_clip=1000.0" STUDENT_LR=0.01
 ```
 
+## 2026-09-05 addendum: corrected-weight arms and corruption mode (GPU/CPU commands)
+
+The mechanism correction (see `research/RESULTS-CORRUPTION-2026-09-05.md` and
+`research/CORRUPTION-PROBE-PREREGISTRATION-2026-09-05.md`) adds two policy
+variants to every runner and a `distill_corruption` knob to the identified
+loss.  The corrected arms are what the next policy N-study should run:
+
+```bash
+# policy-level N-study with the corrected arms (local CPU: parallel jobs)
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --seeds 0 1 2 3 4 5 6 7 8 9 \
+  --variants ordinary hybrid lagged_hybrid identified_hybrid identified_eq identified_wonly \
+  --jobs 10 --threads 2 \
+  --out runs/policy_corrected_weights_10seed.json
+
+# same, spread over GPUs (each seed worker pinned to a device; env-step-bound
+# lab, so GPU helps only via seed parallelism, and CUDA rows are not
+# bit-identical to CPU - adjudicate on CPU)
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --seeds 0 .. 29 --variants ... --jobs 8 --threads 2 --gpu-ids 0,1 \
+  --out runs/policy_corrected_weights_30seed_gpu.json
+```
+
+Probe-level corrected-arm cells (fast, ~2 min/seed/arm on CPU):
+
+```bash
+# equal-weight identified (recovers g; the corrected control)
+python -m udwm.scripts.probe_u_collapse --variant identified_eq --seed 0 \
+  --out runs/probe_u_eq_s0.json
+
+# EMA-both identified (historical config; collapses g -> the control cell)
+python -m udwm.scripts.probe_u_collapse --variant identified_hybrid --seed 0 \
+  --out runs/probe_u_ema_s0.json
+
+# w-only EMA (also collapses g; identifies the epistemic up-weight as driver)
+python -m udwm.scripts.probe_u_collapse --variant identified_wonly --seed 0 \
+  --out runs/probe_u_wonly_s0.json
+```
+
+Corruption-mode probes (the registered corruption-distribution test;
+`schedule` is the bit-identical default):
+
+```bash
+python -m udwm.scripts.probe_u_collapse --variant identified_eq --seed 0 \
+  --set distill_corruption=pure  --out runs/probe_u_pure_s0.json
+python -m udwm.scripts.probe_u_collapse --variant identified_eq --seed 0 \
+  --set distill_corruption=maxt  --out runs/probe_u_maxt_s0.json
+```
+
+Verdict at probe scale (2 seeds, 2026-09-05): the corruption distribution is
+NOT the binding constraint - equal-weight identified recovers `g` (u-rank
+0.88-0.92) at every corruption level, while EMA-both and w-only collapse it.
+GPU use for these cells is pointless (CPU is faster at this lab's scale);
+use GPU only for seed-parallel policy batches or future image-scale work.
+
 ## Kaggle / cloud GPU quickstart (future DMC-scale work)
 
-The reviewer-endorsed next benchmark is a long-horizon low-dimensional task
-(e.g. a DMC/MuJoCo-scale env) - not pixels. Kaggle images ship
-`dm_control`/`mujoco`, which this machine does not have (`gymnasium` only), so
-Kaggle is the right place for it. Rules to keep the repo's discipline intact:
+The registered next benchmark is a long-horizon low-dimensional task (a
+DMC/MuJoCo-scale env), pre-registered in
+`research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md`; that file is the binding
+contract (diagnostic gate first: measure g*/w* under the DMC critic, then run
+the comparison with the pre-committed arms). Kaggle images ship
+`dm_control`/`mujoco`, which this machine does not have (`gymnasium` only).
 
-1. **Register before running**: write the pre-registration (endpoint,
-   threshold, seed count, arms, decided before reading any row) into
-   `research/` and commit it before spending compute.
-2. Kaggle cell (run after uploading this repo or `git clone`):
+1. Register before running: the DMC pre-registration is committed; any change
+   to arms/endpoints/seeds needs a new registration before compute is spent.
+2. Repo does not have `setup.py`; on the Kaggle host export PYTHONPATH and
+   install extras:
    ```bash
-   pip install -e . 2>/dev/null || true   # repo has no setup.py; use PYTHONPATH
-   export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+   git clone https://github.com/nisaral/uncertainty-diffusion-world-models
+   cd uncertainty-diffusion-world-models
+   pip install -q gymnasium numpy torch dm_control mujoco pyyaml tqdm
+   export PYTHONPATH=$PWD
    python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
-   python -m udwm.scripts.run_delayed_bimodal_policy_ablation --help   # CPU smoke
    ```
-3. For DMC-scale runs use the policy runners with `--device cuda`; adjudicate
-   decisive rows on CPU afterwards (CUDA is not bit-identical; see above).
-4. If the DMC study includes the identified loss, check the value map first:
-   the leverage-fix result says this failure needs g >> w under the critic.
+3. Add the DMC env adapter under `udwm/envs/registry.py` (`dmc.<task>` id) -
+   the only missing piece - then run the policy runners with `--device cuda`
+   and `--gpu-ids` for seed parallelism. Adjudicate decisive rows on CPU
+   afterwards (CUDA is not bit-identical to CPU in this repo; see top of file).
+4. If the gate says aleatoric-dominated, run the `identified_eq` arm (equal
+   weight) as the uncertainty-preserving candidate and keep
+   `identified_hybrid` (EMA) as the expected-collapse control; do NOT carry
+   lambda/LR scaling as a promising arm (that thread closed 2026-09-05).

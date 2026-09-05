@@ -171,3 +171,27 @@ walk into the boundary. The remaining lever is the objective's corruption
 distribution (evaluate the w/g terms at pure-noise t_scaled=1 corruptions),
 not its weights or step size. Thread closed as diagnosis + confirmed dead end
 for the naive fix.
+## Addendum (2026-09-05): the collapse attribution changes under the corrected config
+
+**Correction (details and tables in `RESULTS-CORRUPTION-2026-09-05.md`).**
+The "identified equal-weight / w-only / g-only" cells in this document and the
+leverage-fix arms all executed with the EMA reweighting on (config-override
+bug, fixed after). The central claim of section 4 - that the aleatoric term
+cannot lift g because its per-update leverage is ~1e-6 at schedule corruptions
+- is therefore **not** a property of the raw identified objective: with the
+EMA removed (equal weights), the same 180-update protocol lifts student g to
+~teacher (u_rank 0.885/0.920, schedule corruptions, seeds 0-1). The ~1e-6
+"leverage" and ~100x estimator-noise measurements describe the
+EMA-down-weighted aleatoric channel (w_scale ~1e5-1e6 vs g_scale ~0.4).
+
+The corrected mechanism: the identified loss has one per-channel knob pair
+(weights on the w and g terms). On an aleatoric-dominated map (g/w ~1e4 under
+the SAC critic), the EMA normaliser sets that pair to ~((g*/w*)^2) - the
+epistemic term dominates the shared-parameter gradient and the student is
+driven to the latent-insensitive (g = 0) solution, where matching the tiny w
+is cheap. Equal weights flip the dominance to the aleatoric term: g recovers,
+w inflates ~50x (the equal-weighting hole). The corruption distribution of the
+decision terms (schedule vs maxt vs pure) does not change this picture. The
+open sub-thread in section 5 ("why member-MSE leaves a latent-sensitive
+extrapolation while identified removes it") is resolved as a weighting
+question, not a corruption question.

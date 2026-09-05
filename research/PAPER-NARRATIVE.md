@@ -7,9 +7,10 @@ Status: NOT a submission; no claims beyond the tables it cites.
 
 One sentence: cheap distilled diffusion world models are the latency fix for
 imagination, but the usual decision-aware distillation loss does not pin down
-the epistemic object a decision needs -- and the fix that separates w from g
-turns out, in policy, to preserve the half of the object that is negligible on
-the benchmark's value map.
+the epistemic object a decision needs -- and each correction that separates w
+from g preserves one half: per-term EMA reweighting keeps the negligible w and
+annihilates g, while equal weights keep g at the cost of an inflated w. Which
+half matters is a property of the value map's g*/w* regime (Section 6).
 
 ---
 
@@ -28,9 +29,10 @@ rewards).
 coverage guarantee, not policy SOTA. A falsifiable claim about the *loss*:
 matching teacher-student value disagreement at a single shared diffusion
 latent does not identify epistemic uncertainty; and on a live SAC critic the
-"correction" that separates w and g still fails in policy, for a mechanism we
-can now name (Section 6). The deliverable is the laboratory and the negative
-tables, not a positive control result.
+EMA-style "correction" that separates w and g fails in policy while its
+equal-weight counterpart recovers the decision object at probe scale, for a
+mechanism we can now name (Section 6). The deliverable is the laboratory and
+the negative tables, not a positive control result.
 
 ## 2. The identifiability problem
 
@@ -104,6 +106,10 @@ Arms {live-Q, lagged-Q} x {M=1 conflated, M>=2 identified}:
   noise. w-rank is the one endpoint identified arms improve (0.29 vs 0.22).
 - Identified arms' return is best in table (-84.8 vs ordinary -104.4) but this
   is a secondary endpoint that does not adjudicate.
+- (2026-09-05 correction: the identified rows in this table ran with the
+  per-term EMA reweighting on; the collapse is attributed to that weighting,
+  not to the identified target itself -- Section 6 and
+  research/RESULTS-CORRUPTION-2026-09-05.md.)
 
 Decision-tree outcome (registered in
 research/DECISION-TREE-2X2-PREREGISTRATION.md): Row 1 - nonstationarity is the
@@ -111,36 +117,45 @@ dominant measured mechanism; the identifiability pathology stands as a
 theoretical result (proof + toy) with no measured policy benefit here. The
 payoff test should test lagging alone.
 
-## 6. Mechanism of the identified-arm collapse (thread #1, resolved 2026-09-05)
+## 6. Mechanism of the identified-arm policy collapse (thread #1; corrected 2026-09-05)
 
 The prior 30-seed doc attributed the collapse to "u = w - g landing on the
-u_min = 0 floor". That was wrong for the eval object (eval is unclamped).
-Measured mechanism (research/U-COLLAPSE-MECHANISM-2026-09-05.md, probe data in
-runs/probe_u_*.json):
+u_min = 0 floor". That was wrong for the eval object (eval is unclamped), and
+a config-override bug (fixed; registered in
+research/CORRUPTION-PROBE-PREREGISTRATION-2026-09-05.md) meant every historical
+"equal-weight / w-only / g-only / M=8" mechanism cell actually ran with the
+per-term EMA reweighting on. The corrected picture
+(research/RESULTS-CORRUPTION-2026-09-05.md, probe data in runs/probe_u_*.json):
 
 1. On DelayedBimodal under the trained SAC critic the local object is
    aleatoric-dominated: teacher u ~ -g, with g ~ 73-90 vs w ~ 0.004-0.008
    (g/w ~ 1e4). Q(s', pi(s')) is hugely latent-sensitive; members agree in mean
    (coupling ~ 0.9998).
-2. Every identified configuration (live/lagged x reweighted/equal-weight;
-   w-only; g-only) collapses the student's aleatoric half: student g ~ 0.01-0.016
-   vs teacher ~70-90, and the student's latent-to-state spread drops to
-   ~0.006 vs teacher ~0.37 (ordinary and lagged_hybrid keep ~0.33). Student w
-   still matches teacher w: the epistemic half works.
-3. Why g cannot be lifted: the aleatoric term is not a zero-gradient dead end
-   (end-state grad norm ~0.2, not cancelled by the member term), but its
-   measured per-update leverage on g is ~2e-6 (matched-draw step response),
-   ~100x below the 2-latent estimator noise floor (~2e-4) and ~1e6-1e7 steps
-   short of closing a g-gap of order 1-100; the whole run has 180 student
-   updates. The configured EMA reweight additionally down-weights the aleatoric
-   gradient by ~1e5-1e6 relative to the epistemic term (w_scale ~ 2.4e5-1e10
-   vs g_scale ~ 0.36-1.3e4), but the g-only cell shows reweighting is not the
-   primary cause.
-4. Consequences: u_student ~ w_student ~ 0; rank is noise; the identified
-   loss is a correct fix for *identifiability* and an ineffective fix for
-   *policy* on this benchmark, in both live and lagged regimes. The fixed map
-   (w, g comparable) does not show the pathology, which is why the fixed-map
-   tables are benign and the live-critic tables are not.
+2. EMA-both and w-only-EMA collapse the student's aleatoric half: student g
+   ~0.01-0.016 vs teacher ~70-90, latent-to-state spread ~0.006 vs teacher
+   ~0.37 (ordinary and lagged_hybrid keep ~0.33), u-rank ~ noise. Student w
+   still matches teacher w: the epistemic half works. Equal-weight identified
+   (the corrected control) does the opposite: student g lifts to ~teacher
+   within the 180-update run (u-rank 0.885/0.920 on seeds 0-1, schedule
+   corruptions) and student w inflates ~50x -- the equal-weighting hole.
+3. Driver and non-drivers: the collapse is the epistemic up-weight under the
+   EMA normaliser (~1e5-1e6 over the aleatoric term) on an aleatoric-
+   dominated map; the aleatoric down-weight is not required (w-only EMA
+   collapses identically), and the corruption distribution of the decision
+   terms is not the binding constraint (g recovers at schedule/maxt/pure
+   alike). The measured ~1e-6 per-update "leverage" and ~100x estimator noise
+   describe the EMA-down-weighted channel, not the raw aleatoric term.
+4. Consequences: the identified loss is a correct fix for *identifiability*;
+   the N=30 policy collapse was the EMA weighting, not the identified target.
+   The operating envelope is a balance-window problem: per-channel estimator
+   noise (std(g_hat)/g* ~ sqrt(2/(N(M-1))), std(w_hat)/w* ~ 1/sqrt(M)) sets
+   how much one channel must be up-weighted before it dominates the shared
+   parameters, and no single scalar weight recovers both w and g when
+   g*/w* >> 1 (theory/identified_balance_window.py). The fixed map (w, g
+   comparable) stays benign, which is why the fixed-map tables do not show the
+   pathology. The registered DMC gate
+   (research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md) is the out-of-sample
+   test of this envelope.
 
 ## 7. Payoff test (#4): mechanism survives 2x horizon, return payoff does not
 
@@ -181,11 +196,15 @@ was declared to require a new registration before the run.
   or a done story for the identified loss in policy.
 - The identified-loss policy study at N=30 is not "finished" as a positive;
   it is finished as an adjudicated negative on this benchmark.
-- Open sub-thread (mechanism): why pure member-MSE and lagged_hybrid leave the
-  1-NFE student's pure-noise (t=1) mapping latent-sensitive while every
-  identified configuration removes that sensitivity is not yet derived from
-  first principles; the probe record and suggested next experiment are in
-  research/U-COLLAPSE-MECHANISM-2026-09-05.md.
+- Resolved sub-thread (mechanism): the "why does the identified loss remove
+  latent sensitivity" question is a weighting question, not a corruption
+  question -- equal-weight identified keeps the pure-noise mapping
+  latent-sensitive (g recovers) while EMA-both/w-only remove it
+  (research/RESULTS-CORRUPTION-2026-09-05.md).
+- Open (balance window): the equal-weight hole on w (student w ~50x teacher at
+  g*/w* ~ 1e4) has no measured scalar-weight fix that also keeps g; whether a
+  dimensionless w-scale gate (~1e2-1e3, not the EMA normaliser) exists is
+  unmeasured and would need a new registration before running.
 - Next benchmark (modality decision, deferred): the payoff null at this scale
   is most plausibly a horizon problem, not a modality problem. The
   right-sized next step is a standard long-horizon low-dimensional task
@@ -208,9 +227,14 @@ was declared to require a new registration before the run.
   udwm/scripts/run_policy_2x2_split_seeds.py; summarizer:
   udwm/scripts/summarize_policy_2x2.py).
 - Payoff: research/RESULTS-PAYOFF-LAGGED-2026-09-03.md.
-- Mechanism: research/U-COLLAPSE-MECHANISM-2026-09-05.md (probe:
+- Mechanism/correction: research/U-COLLAPSE-MECHANISM-2026-09-05.md,
+  research/RESULTS-CORRUPTION-2026-09-05.md (probe:
   udwm/scripts/probe_u_collapse.py; data runs/probe_u_*.json).
+- Balance window: theory/identified_balance_window.py (+ toy re-adjudication
+  of runs/ground_truth_w_g.json).
+- DMC gate: research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md.
 - Registration docs: research/DECISION-TREE-2X2-PREREGISTRATION.md,
-  research/PAYOFF-LAGGED-PREREGISTRATION.md; N=50 amendment inside the
-  50-seed stress doc.
+  research/PAYOFF-LAGGED-PREREGISTRATION.md,
+  research/CORRUPTION-PROBE-PREREGISTRATION-2026-09-05.md; N=50 amendment
+  inside the 50-seed stress doc.
 - Reproduce/GPU: REPRODUCE.md, RUN_ON_GPU.md.

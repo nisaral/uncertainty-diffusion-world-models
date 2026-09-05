@@ -84,4 +84,33 @@ at g=0 (B2). Two structural constraints, not a step size, bind:
 - This is a same-scale negative that completes the causal chain from the
   mechanism doc: identifiable-in-theory -> ineffective-in-policy -> why
   (aleatoric starvation) -> naive leverage fixes do not help (measured, 2
-  seeds) -> the remaining lever is the objective's corruption distribution.
+  seeds) -> the remaining lever is the objective's corruption distribution.## Addendum (2026-09-05, post-hoc): config-override bug invalidates the arm labels
+
+**Correction (see `RESULTS-CORRUPTION-2026-09-05.md`).** The probe applied
+`--set` overrides before `make_cfg`, and `VARIANTS["identified_hybrid"]`
+re-applied `distill_reweight_ema=True` and `distill_aleatoric_weight=1.0`
+afterwards. Every arm in this document therefore ran **EMA-both reweighted
+with the variant-default aleatoric weight**, regardless of the `--set`
+labels: "control = equal-weight" was actually EMA-on; "lambda_g = 1e4" was
+aleatoric weight 1.0; "M = 8" (B3) was M = 2 (`distill_m_latents` is also in
+`VARIANTS`). Only `distill_grad_clip` and `--student-lr` (set directly on the
+optimizer) varied as documented. The probe is fixed (overrides applied after
+`make_cfg`); fresh corrected runs in `RESULTS-CORRUPTION-2026-09-05.md` show:
+
+- Equal-weight identified (schedule corruptions) **recovers g** (u_rank
+  0.885/0.920, student g within ~1.2x teacher) on the live critic: the
+  aleatoric starvation measured here was the EMA-down-weighted channel.
+- EMA-both and w-only-EMA both collapse g to ~0.01 (the epistemic up-weight
+  `w_scale ~ 1e5-1e6` is the driver, not the aleatoric down-weight).
+- The B-arm endpoint (student LR 0.1 + clip 1e3 -> g exactly 0) replicates
+  across seeds under the corrected attribution (EMA-on config); see the N=10
+  table in `RESULTS-CORRUPTION-2026-09-05.md`.
+
+The verdict of this document ("not solely a step-size artifact; the remaining
+lever is the corruption distribution") is superseded: under equal weights the
+corruption distribution is not the binding constraint either (g recovers at
+schedule/maxt/pure alike). The binding constraint found in this whole thread
+is the **per-term EMA reweighting ratio** (~(g*/w*)^2) that starves the
+aleatoric channel when the map is aleatoric-dominated, and the equal-weight
+hole on w when it is not - i.e. a balance-window problem, consistent with the
+toy (`theory/identified_balance_window.py`).

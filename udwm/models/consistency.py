@@ -408,6 +408,7 @@ def identified_decision_distill_loss(
     normalize_values: bool = False,
     reweight: bool = False,
     normalizer: Optional[TermScaleEMA] = None,
+    reweight_w_only: bool = False,
     corruption: str = "schedule",
 ) -> Dict[str, torch.Tensor]:
     """Decision-aware distillation with an *identified* uncertainty target.
@@ -442,14 +443,14 @@ def identified_decision_distill_loss(
             student, teacher, obs, actions, next_obs, value_fn, rewards,
             m_latents, value_weight, variance_weight, aleatoric_weight,
             state_geometry_weight, state_pairwise_weight, normalize_values,
-            reweight, normalizer,
+            reweight, normalizer, reweight_w_only,
         )
     if corruption in ("pure", "maxt"):
         return _identified_decision_corruption_loss(
             student, teacher, obs, actions, next_obs, value_fn, rewards,
             m_latents, value_weight, variance_weight, aleatoric_weight,
             state_geometry_weight, state_pairwise_weight, normalize_values,
-            reweight, normalizer, corruption,
+            reweight, normalizer, reweight_w_only, corruption,
         )
     raise ValueError("unknown corruption mode: %r" % corruption)
 
@@ -471,6 +472,7 @@ def _identified_decision_corruption_loss(
     normalize_values: bool = False,
     reweight: bool = False,
     normalizer: Optional[TermScaleEMA] = None,
+    reweight_w_only: bool = False,
     corruption: str = "pure",
 ) -> Dict[str, torch.Tensor]:
     """Identified loss whose decision (w/g/geometry) terms are evaluated at a
@@ -571,7 +573,8 @@ def _identified_decision_corruption_loss(
     s_w, s_g = coupled_w_g(s_value, m)
     if reweight and normalizer is not None:
         w_scale = normalizer.update("w", t_w)
-        g_scale = normalizer.update("g", t_g)
+        g_scale = (torch.ones((), device=t_w.device) if reweight_w_only
+                   else normalizer.update("g", t_g))
     else:
         w_scale = g_scale = torch.ones((), device=t_w.device)
     t_mu, s_mu = t_value.mean(dim=1), s_value.mean(dim=1)
@@ -630,6 +633,7 @@ def _identified_schedule_loss(
     normalize_values: bool = False,
     reweight: bool = False,
     normalizer: Optional[TermScaleEMA] = None,
+    reweight_w_only: bool = False,
 ) -> Dict[str, torch.Tensor]:
     """Decision-aware distillation with an *identified* uncertainty target.
 
@@ -700,7 +704,8 @@ def _identified_schedule_loss(
     s_w, s_g = coupled_w_g(s_value, m)
     if reweight and normalizer is not None:
         w_scale = normalizer.update("w", t_w)
-        g_scale = normalizer.update("g", t_g)
+        g_scale = (torch.ones((), device=t_w.device) if reweight_w_only
+                   else normalizer.update("g", t_g))
     else:
         w_scale = g_scale = torch.ones((), device=t_w.device)
     # Member means are now M-averaged, so the geometry term is a lower-variance
@@ -767,6 +772,7 @@ class DistilledWorldModel(nn.Module):
         aleatoric_weight: float = 1.0,
         reweight_ema: bool = False,
         reweight_floor: float = 1e-6,
+        reweight_w_only: bool = False,
         corruption: str = "schedule",
     ) -> None:
         super().__init__()
@@ -794,6 +800,7 @@ class DistilledWorldModel(nn.Module):
         self.reweight_ema = bool(reweight_ema)
         self.scale_ema = TermScaleEMA(floor=float(reweight_floor)) if reweight_ema else None
         self.corruption = corruption
+        self.reweight_w_only = bool(reweight_w_only)
         self.teacher_frozen = False
 
     def freeze_teacher(self) -> None:
@@ -829,6 +836,7 @@ class DistilledWorldModel(nn.Module):
                 normalize_values=self.normalize_values,
                 reweight=self.reweight_ema,
                 normalizer=self.scale_ema,
+                reweight_w_only=self.reweight_w_only,
                 corruption=self.corruption,
             )
             s_loss = parts["total"]
