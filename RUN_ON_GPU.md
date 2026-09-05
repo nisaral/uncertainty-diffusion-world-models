@@ -156,12 +156,12 @@ python -m udwm.scripts.run_policy_2x2_split_seeds \
   --jobs 10 --threads 2 \
   --out runs/policy_corrected_weights_10seed.json
 
-# same, spread over GPUs (each seed worker pinned to a device; env-step-bound
-# lab, so GPU helps only via seed parallelism, and CUDA rows are not
-# bit-identical to CPU - adjudicate on CPU)
-python -m udwm.scripts.run_policy_2x2_split_seeds \
-  --seeds 0 .. 29 --variants ... --jobs 8 --threads 2 --gpu-ids 0,1 \
-  --out runs/policy_corrected_weights_30seed_gpu.json
+# same, spread over GPUs - use the committed launcher (root-level
+# policy_sweep_gpu.sh; one worker per seed/GPU, CUDA_VISIBLE_DEVICES pinning
+# handled by the driver). CUDA rows are not bit-identical to CPU - adjudicate
+# on CPU:
+SEEDS="0 1 2 ... 29" GPU_IDS="0,1" OUT=runs/policy_corrected_weights_30seed_gpu.json \
+  ./policy_sweep_gpu.sh
 ```
 
 Probe-level corrected-arm cells (fast, ~2 min/seed/arm on CPU):
