@@ -75,6 +75,10 @@ def run_seed(seed: int, args, out: Path, gpu_id=None) -> int:
     env["MKL_NUM_THREADS"] = str(max(1, int(args.threads)))
     proc = subprocess.run(cmd, env=env, capture_output=True,
                           text=True, encoding="utf-8", errors="replace")
+    if proc.returncode != 0:
+        tail = "\n".join((proc.stderr or "").splitlines()[-80:])
+        print(f"[seed {seed}] exited {proc.returncode}; stderr tail:\n{tail}",
+              file=sys.stderr)
     return proc.returncode
 
 

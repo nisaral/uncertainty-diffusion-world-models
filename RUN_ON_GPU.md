@@ -290,6 +290,46 @@ from IPython.display import FileLink
 FileLink("runs/dmc_payoff_30seed_gpu.json")
 ```
 
+### Single-cell quick start (setup -> 10-seed sanity)
+
+Prefer one cell over cells 0-7 above? This runs clone, install, stage0,
+stage1 gate, stage2 on a 10-seed subset, and stage3 in a single cell.
+`set -e` stops the cell at the first failure (a smoke failure must not
+cascade into later stages). The full 30-seed run stays a separate cell
+because it runs for hours and the gate regime must be recorded first.
+
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working
+[ -d uncertainty-diffusion-world-models ] || git clone https://github.com/nisaral/uncertainty-diffusion-world-models
+cd uncertainty-diffusion-world-models
+git pull --ff-only
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+pip install -q gymnasium numpy dm_control mujoco shimmy pyyaml tqdm
+echo "=== [1/4] stage0: env smoke ==="
+GPU_IDS=0,1 bash dmc_payoff.sh stage0
+echo "=== [2/4] stage1: diagnostic gate (2 seeds, ordinary) ==="
+GPU_IDS=0,1 bash dmc_payoff.sh stage1
+echo "=== [3/4] stage2: 10-seed sanity subset ==="
+GPU_IDS=0,1 SEEDS="0 1 2 3 4 5 6 7 8 9" OUT=runs/dmc_payoff_10seed_gpu.json bash dmc_payoff.sh stage2
+echo "=== [4/4] stage3: sanity summary ==="
+OUT=runs/dmc_payoff_10seed_gpu.json bash dmc_payoff.sh stage3
+echo "sanity done - READ the gate regime in [2/4], record it in"
+echo "research/RESULTS-DMC-PAYOFF-*.md, then run the 30-seed cell below."
+```
+
+```bash
+%%bash
+# Full 30-seed run + adjudication (run AFTER recording the gate regime)
+set -euo pipefail
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+git pull --ff-only
+GPU_IDS=0,1 bash dmc_payoff.sh stage2   # defaults: seeds 0..29 -> runs/dmc_payoff_30seed_gpu.json
+GPU_IDS=0,1 bash dmc_payoff.sh stage3
+```
+
 Terminal equivalent (one shell):
 
 ```bash
@@ -304,6 +344,9 @@ bash dmc_payoff.sh stage3
 ```
 
 Notes:
+- dm_control tasks expose Dict observations (`position`/`velocity`/`touch`,
+  etc.); `udwm.envs.registry.make_env` flattens them to 1-D Box with
+  gymnasium's `FlattenObservation`, so any registered locomotion task works.
 - Registered arms run unchanged: `ordinary hybrid lagged_hybrid
   identified_hybrid identified_eq` (Amendment 1: EMA-collapse control +
   equal-weight partial-transfer candidate), 3,600 env steps per seed. Do NOT

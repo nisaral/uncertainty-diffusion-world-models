@@ -44,7 +44,14 @@ def make_env(env_id: str, seed: int | None = None, **kwargs) -> gym.Env:
             raise ImportError(
                 "DeepMind Control envs require: pip install 'shimmy[dm-control]'"
             ) from e
-    env = gym.make(env_id, **kwargs)
+        # dm_control tasks expose Dict observations (position/velocity/touch,
+        # etc.); the shared core requires 1-D Box, so flatten once here. This
+        # keeps trainer, eval, and smoke paths identical for every env id.
+        from gymnasium.wrappers import FlattenObservation
+
+        env = FlattenObservation(gym.make(env_id, **kwargs))
+    else:
+        env = gym.make(env_id, **kwargs)
     if seed is not None:
         env.reset(seed=seed)
     return env
