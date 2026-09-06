@@ -1,0 +1,100 @@
+# Diagnostic budget probe config for the DMC payoff study (registered in
+# research/DMC-BUDGET-PROBE-PREREGISTRATION-2026-09-07.md; diagnostic only,
+# never adjudicates the payoff bars). Identical to dmc_hopper_distill.yaml
+# except eval_freq 3000 (cap eval wall-time at the 15,000-step budget) and
+# probe log/checkpoint paths. Final-eval metrics are unchanged (evaluate_full
+# at the end, 10 episodes), so 15k rows are comparable to 3.6k sanity rows.
+# DMC payoff config: dm_control/hopper-hop-v0 (registered DMC gate + payoff
+# study, research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md incl. Amendment 1).
+# Source: configs/delayed_bimodal_distill.yaml. Only registered knobs change:
+# env.id, max_episode_steps (>= 500), gamma ~0.99, and the 3,600-step payoff
+# total. All other arms/knobs are the DelayedBimodal defaults. device: cpu is
+# the repo default; the staged launcher passes --device cuda/--gpu-ids.
+seed: 0
+device: cpu
+
+env:
+  id: dm_control/hopper-hop-v0
+  max_episode_steps: 1000
+
+model:
+  type: diffusion
+  ensemble_size: 5
+  hidden_dims: [96, 96]
+  student_hidden_dims: [32, 32]
+  diffusion_steps: 8
+  sample_steps: 4
+  use_consistency_distill: true
+  preserve_distilled_uncertainty: true
+  distill_two_stage: true
+  # Exact optimizer-update budget, independent of warmup/train frequency.
+  distill_teacher_pretrain_updates: 36
+  distill_freeze_after_steps: 600
+  distill_mean_weight: 0.0
+  distill_geometry_weight: 0.0
+  distill_pairwise_weight: 0.0
+  distill_decision_weight: 0.0
+  distill_value_variance_weight: 0.0
+  distill_hybrid_state_weight: 0.0
+  distill_hybrid_pairwise_weight: 0.0
+  # Live critic: the 10-seed policy study falsified this coupling.
+  distill_use_target_critic: false
+  # EMA per-term reweighting for the identified loss (g >> w hole).
+  distill_reweight_ema: false
+  distill_reweight_floor: 1.0e-6
+  distill_reweight_w_only: false
+  distill_corruption: schedule
+  distill_normalize_values: false
+  distill_guard_enabled: false
+
+reward_term:
+  joint_with_diffusion: true
+  hidden_dims: [64, 64]
+
+ube:
+  m_samples: 4
+  u_min: 0.0
+  hidden_dims: [96, 96]
+
+agent:
+  gamma: 0.99
+  tau: 0.01
+  actor_lr: 3.0e-4
+  critic_lr: 3.0e-4
+  alpha_lr: 3.0e-4
+  auto_alpha: true
+  target_entropy: null
+  hidden_dims: [96, 96]
+  batch_size: 128
+  optimism_lambda: 0.0
+  use_ube: true
+
+u_gate:
+  mode: both
+  enable_after_steps: 900
+  stop_percentile: 0.85
+  weight_beta: 1.0
+  min_weight: 0.05
+  audit: false
+
+mbpo:
+  real_ratio: 0.2
+  rollout_length: 3
+  rollout_length_start: 1
+  horizon_curriculum_steps: 800
+  rollouts_per_step: 80
+  model_train_freq: 100
+  model_retain_epochs: 1
+  num_model_epochs: 12
+  model_batch_size: 128
+  agent_updates_per_step: 2
+  warmup_steps: 300
+  total_env_steps: 3600
+  eval_freq: 3000
+  log_freq: 100
+  buffer_size: 50000
+  model_buffer_size: 50000
+
+paths:
+  log_dir: runs/dmc_probe
+  checkpoint_dir: checkpoints/dmc_probe

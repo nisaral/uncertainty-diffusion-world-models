@@ -256,3 +256,22 @@ was declared to require a new registration before the run.
   research/CORRUPTION-PROBE-PREREGISTRATION-2026-09-05.md; N=50 amendment
   inside the 50-seed stress doc.
 - Reproduce/GPU: REPRODUCE.md, RUN_ON_GPU.md.
+
+---
+
+## 2026-09-07 addendum: DMC sanity complicates the transfer claim
+
+The DMC/hopper-hop 10-seed sanity (registered; N=10, not adjudication) splits
+the story. The EMA-collapse mechanism replicates cleanly across environments
+(eq - EMA u_rank +0.419, 10/10, tight CI), and the arm ordering replicates
+(lagged_hybrid > ordinary > hybrid ~= eq > EMA). What does not transfer is
+the magnitude claim: every arm loses ~half its u_rank (ordinary 0.51 vs 0.94
+on DelayedBimodal), eq - hybrid is a wash (-0.008, 5/10, vs +0.214, 10/10 on
+DelayedBimodal), and the eq w hole disappears. At 3,600 steps DMC is a
+3.6-episode study (vs 15-30 episode-equivalents on DelayedBimodal) with flat
+returns everywhere, so the sanity cannot separate "the equal-weight benefit
+does not transfer" from "the u_rank measurement is degenerate at this
+budget". The 30-seed adjudication is held pending the registered budget probe
+(15k = 15 episodes). Outreach framing stays on hold: the current honest claim
+is mechanism-generality plus environment-dependent practical benefit, not the
+pre-DMC partial-transfer paragraph.

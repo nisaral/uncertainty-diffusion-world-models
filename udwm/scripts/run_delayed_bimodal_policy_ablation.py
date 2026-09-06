@@ -14,6 +14,19 @@ from udwm.rl.trainer import MBPOTrainer
 from udwm.utils.config import load_config, set_seed
 
 
+def json_safe(x):
+    """Recursively coerce numpy/torch values so row payloads stay JSON-clean."""
+    if isinstance(x, dict):
+        return {str(k): json_safe(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [json_safe(v) for v in x]
+    if isinstance(x, np.generic):
+        return x.item()
+    if isinstance(x, torch.Tensor):
+        return float(x.detach().cpu()) if x.dim() == 0 else x.detach().cpu().tolist()
+    return x
+
+
 VARIANTS = {
     "ordinary": {
         "distill_decision_weight": 0.0,
@@ -225,6 +238,10 @@ def main(argv=None):
                     trainer._parameter_checksum(trainer.world_model.teacher)
                     if hasattr(trainer.world_model, "teacher") else None
                 ),
+                # Per-eval history (step, return_mean, u_rank_corr, ...) so
+                # budget/learning diagnostics need no re-run. Sanity rows
+                # written before 2026-09-07 do not carry this field.
+                "eval_history": json_safe(result.get("logs", [])),
                 **metrics,
             }
             rows.append(row)

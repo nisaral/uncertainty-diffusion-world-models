@@ -1,4 +1,4 @@
-﻿# DMC gate preregistration: out-of-sample test of the balance-window theory (2026-09-05)
+# DMC gate preregistration: out-of-sample test of the balance-window theory (2026-09-05)
 
 **Status: registered before any DMC-scale run.**  No dm_control/MuJoCo run has
 happened; the environment is not installed on this machine (`gymnasium` only).
@@ -115,3 +115,21 @@ candidate; the EMA arm remains as the control that reproduces the collapse.
 **Files.** Pre-registration: this file. Data:
 `runs/dmc_payoff_*.json` (GPU/Kaggle host). Results doc:
 `research/RESULTS-DMC-PAYOFF-*.md` (to be written after the gate).
+
+---
+
+## Addendum 2 (2026-09-07): 10-seed sanity + gate recorded; no protocol change yet
+
+The DMC 10-seed sanity + gate record exists
+(`research/RESULTS-DMC-SANITY-2026-09-07.md`): gate regime
+aleatoric-dominated (median g*/w* = 8,224); bar 1 replicates cross-environment
+(eq - identified_hybrid u_rank +0.419, 10/10); bar 2 does not (eq 0/10 >=
+0.70, mean 0.429); eq - hybrid is a wash (-0.008, 5/10), i.e. the
+DelayedBimodal headline contrast does not transfer at sanity scale. Because
+every arm loses ~half its u_rank level vs DelayedBimodal (ordinary 0.51) at a
+3.6-episode budget (3,600 steps on 1,000-step episodes) with flat returns
+everywhere, the sanity leaves an operating-point confound open. The registered
+budget probe (`research/DMC-BUDGET-PROBE-PREREGISTRATION-2026-09-07.md`,
+15k = 15 episodes, seeds 0-1) decides whether the 30-seed adjudication runs at
+3,600 steps as written or is amended (Amendment 2). No endpoint/arm/seed
+change is made by this addendum; do not quote sanity rows as adjudicated.

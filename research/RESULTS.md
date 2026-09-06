@@ -34,3 +34,22 @@ hybrid, 30/30); return payoff not demonstrated (delta -44.6, 15/30, CI
 [-102.6, +10.2]). The open question for a payoff claim is the
 benchmark/protocol (the deferred modality choice), not more steps on
 DelayedBimodal: MBPO returns drift down past ~1,800 env steps here.
+
+---
+
+## Addendum 2026-09-07: DMC 10-seed sanity + budget probe
+
+DMC/hopper-hop 10-seed sanity (GPU rows, N=10, NOT adjudication): gate regime
+aleatoric-dominated (median g*/w* 8,224). The EMA-collapse mechanism
+replicates cross-environment (eq - identified_hybrid u_rank +0.419, 10/10);
+the arm ordering replicates (lagged_hybrid 0.573 > ordinary 0.511 > hybrid
+0.438 ~= eq 0.429 > EMA 0.01); absolute levels do not (ordinary 0.51 here vs
+0.94 on DelayedBimodal). The DelayedBimodal headline (eq > hybrid, +0.214,
+10/10) is a wash on DMC (-0.008, 5/10); eq - ordinary and hybrid - ordinary
+are confirmed-below on u_rank; the eq w hole does not replicate (eq w_rmse
+better than ordinary, 9/10). Because 3,600 steps = 3.6 1,000-step episodes
+and returns are flat everywhere, the sanity cannot distinguish "identified_eq
+does not transfer" from "the u_rank measurement is degenerate at this
+budget"; the 30-seed adjudication is held pending the registered budget probe
+(15k = 15 episodes, seeds 0-1).
+[RESULTS-DMC-SANITY-2026-09-07.md](RESULTS-DMC-SANITY-2026-09-07.md)

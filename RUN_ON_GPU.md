@@ -330,6 +330,35 @@ GPU_IDS=0,1 bash dmc_payoff.sh stage2   # defaults: seeds 0..29 -> runs/dmc_payo
 GPU_IDS=0,1 bash dmc_payoff.sh stage3
 ```
 
+### Registered budget probe (2026-09-07, diagnostic)
+
+The 10-seed sanity left an operating-point confound (every arm ~0.5 u_rank at
+3,600 steps = 3.6 episodes of a 1,000-step task; returns flat). Per
+`research/DMC-BUDGET-PROBE-PREREGISTRATION-2026-09-07.md`, run this probe
+BEFORE the 30-seed cell below - it decides whether the 30-seed adjudication
+runs at 3,600 steps or is amended to a higher budget. Diagnostic only
+(ordinary / lagged_hybrid / identified_eq at 15,000 steps = 15 episodes,
+seeds 0-1; ~1-2 h on 2x T4):
+
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+git pull --ff-only
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --config configs/dmc_hopper_probe.yaml \
+  --seeds 0 1 \
+  --variants ordinary lagged_hybrid identified_eq \
+  --steps 15000 --jobs 2 --threads 2 --gpu-ids 0,1 \
+  --out runs/dmc_budget_probe_gpu.json
+python -m udwm.scripts.print_eval_history --data runs/dmc_budget_probe_gpu.json
+```
+
+Compare the 15k u_rank/return against the same seeds' 3.6k rows in
+`runs/dmc_payoff_10seed_gpu.json`; the decision rule is pre-committed in the
+probe registration.
+
 Terminal equivalent (one shell):
 
 ```bash
