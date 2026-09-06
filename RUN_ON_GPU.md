@@ -196,44 +196,116 @@ NOT the binding constraint - equal-weight identified recovers `g` (u-rank
 GPU use for these cells is pointless (CPU is faster at this lab's scale);
 use GPU only for seed-parallel policy batches or future image-scale work.
 
-## Kaggle / cloud GPU quickstart (future DMC-scale work)
+## Kaggle / cloud GPU quickstart (DMC payoff study)
 
-The registered next benchmark is a long-horizon low-dimensional task (a
-DMC/MuJoCo-scale env), pre-registered in
-`research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md`; that file is the binding
-contract (diagnostic gate first: measure g*/w* under the DMC critic, then run
-the comparison with the pre-committed arms). Kaggle images ship
-`dm_control`/`mujoco`, which this machine does not have (`gymnasium` only).
+The registered next benchmark is a long-horizon low-dimensional DMC task,
+pre-registered in `research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md`
+(binding contract, incl. Amendment 1: diagnostic gate first - measure the
+teacher `g*/w*` under the live critic - then the pre-committed arms). The
+task config (`configs/dmc_hopper_distill.yaml`) and the staged launcher
+(`dmc_payoff.sh`) are committed; nothing needs to be hand-edited on the host.
 
-1. Register before running: the DMC pre-registration (incl. Amendment 1) is
-   committed; any change to arms/endpoints/seeds needs a new registration
-   before compute is spent.
-2. Repo has no `setup.py`; on the Kaggle host export PYTHONPATH and install
-   extras:
-   ```bash
-   git clone https://github.com/nisaral/uncertainty-diffusion-world-models
-   cd uncertainty-diffusion-world-models
-   pip install -q gymnasium numpy torch dm_control mujoco pyyaml tqdm
-   export PYTHONPATH=$PWD
-   python -c "import torch; print(torch.cuda.is_available(), torch.cuda.device_count())"
-   ```
-3. Create the task config from `configs/delayed_bimodal_distill.yaml`
-   (`env.id: dm_control/<task>` - `udwm/envs/registry.py` already routes these
-   ids through shimmy; set `max_episode_steps >= 500` and `gamma ~0.99`).
-4. Run the staged launcher in order - stage0 smoke, stage1 gate (mandatory,
-   prints teacher g*/w* regime; stage2 refuses to start without it), stage2
-   main comparison seed-parallel over GPUs, stage3 CPU adjudication:
-   ```bash
-   TASK=dm_control/hopper-hop-v0 CONFIG=configs/dmc_hopper_distill.yaml \
-     GPU_IDS=0,1 ./dmc_payoff.sh stage0
-   TASK=dm_control/hopper-hop-v0 CONFIG=configs/dmc_hopper_distill.yaml \
-     GPU_IDS=0,1 ./dmc_payoff.sh stage1
-   TASK=dm_control/hopper-hop-v0 CONFIG=configs/dmc_hopper_distill.yaml \
-     GPU_IDS=0,1 SEEDS="0 .. 29" OUT=runs/dmc_payoff_30seed_gpu.json \
-     ./dmc_payoff.sh stage2
-   ./dmc_payoff.sh stage3   # after copying the GPU json to a CPU box
-   ```
-   `identified_eq` runs as its own arm (Amendment 1: three conditions -
-   baseline, EMA-collapse control, equal-weight partial-transfer candidate).
-   Do NOT carry lambda/LR scaling as a promising arm (thread closed 2026-09-05).
-   Adjudicate decisive rows on CPU afterwards (CUDA is not bit-identical).
+Target host: Kaggle notebook, 2x T4. The repo's GPU-scaling note applies:
+GPU pays off as seed-parallel policy batches (`jobs = #GPUs`), which is what
+`stage1`/`stage2` do. A single-GPU session works too - set `GPU_IDS=0` and
+the launcher falls back to one worker.
+
+### Notebook cells (copy each block into its own cell)
+
+`!cd` and `!export` do not persist between cells. Use `%cd` (a magic, it
+persists) and set env vars in a Python cell via `os.environ`. The launcher
+defaults already match the registered study, so most cells need no overrides.
+
+```python
+# Cell 0 - clone + cwd (persists via %cd)
+!git clone https://github.com/nisaral/uncertainty-diffusion-world-models
+%cd /kaggle/working/uncertainty-diffusion-world-models
+!git log --oneline -1
+```
+
+```python
+# Cell 1 - launcher env (2x T4). Single-GPU session: GPU_IDS = "0"
+import os
+os.environ["PYTHONPATH"] = "/kaggle/working/uncertainty-diffusion-world-models"
+os.environ["GPU_IDS"] = "0,1"
+os.environ["OUT"] = "runs/dmc_payoff_30seed_gpu.json"
+import torch
+print("cuda:", torch.cuda.is_available(), "| devices:", torch.cuda.device_count())
+```
+
+```python
+# Cell 2 - deps. torch/gymnasium/numpy already ship on Kaggle (pip no-ops if
+# satisfied); shimmy bridges dm_control -> gymnasium for udwm.envs.registry.
+!pip install -q gymnasium numpy dm_control mujoco shimmy pyyaml tqdm
+```
+
+```python
+# Cell 3 - stage0 smoke: env spaces + CUDA (~1 min). Fix installs here if it fails.
+!bash dmc_payoff.sh stage0
+```
+
+```python
+# Cell 4 - stage1 diagnostic gate (mandatory). 2 seeds, ordinary arm.
+!bash dmc_payoff.sh stage1
+# Prints per-seed teacher g*/w* and the pre-committed regime; stage2 refuses
+# to start until runs/dmc_gate_pilot.json exists. Record the regime in the
+# results doc (research/RESULTS-DMC-PAYOFF-*.md) BEFORE the full comparison.
+```
+
+```python
+# Cell 5 - stage2 sanity subset (10 seeds) before the full 30
+import os
+os.environ["SEEDS"] = "0 1 2 3 4 5 6 7 8 9"
+os.environ["OUT"] = "runs/dmc_payoff_10seed_gpu.json"
+!bash dmc_payoff.sh stage2
+```
+
+```python
+# Cell 6 - stage2 full run, 30 seeds. Resume-safe: after a dropped session,
+# re-running this cell skips completed per-seed partials.
+import os
+os.environ["SEEDS"] = "0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29"
+os.environ["OUT"] = "runs/dmc_payoff_30seed_gpu.json"
+!bash dmc_payoff.sh stage2
+```
+
+```python
+# Cell 7 - stage3 adjudication summary (CPU aggregation of the GPU rows)
+!bash dmc_payoff.sh stage3
+```
+
+```python
+# Cell 8 - download the merged json(s) for runs/ + the results doc
+from IPython.display import FileLink
+FileLink("runs/dmc_payoff_30seed_gpu.json")
+```
+
+Terminal equivalent (one shell):
+
+```bash
+git clone https://github.com/nisaral/uncertainty-diffusion-world-models && cd uncertainty-diffusion-world-models
+pip install -q gymnasium numpy dm_control mujoco shimmy pyyaml tqdm
+export PYTHONPATH=$PWD
+export GPU_IDS=0,1        # single-GPU session: GPU_IDS=0
+bash dmc_payoff.sh stage0
+bash dmc_payoff.sh stage1
+bash dmc_payoff.sh stage2 # defaults: 30 seeds -> runs/dmc_payoff_30seed_gpu.json
+bash dmc_payoff.sh stage3
+```
+
+Notes:
+- Registered arms run unchanged: `ordinary hybrid lagged_hybrid
+  identified_hybrid identified_eq` (Amendment 1: EMA-collapse control +
+  equal-weight partial-transfer candidate), 3,600 env steps per seed. Do NOT
+  change arms/endpoints/seeds without a new registration.
+- Resume: per-seed partial files are written atomically per arm
+  (`runs/*_seedN.partial.json`); re-running stage1/stage2 resumes finished
+  seeds after a session drop.
+- Install conflicts (Kaggle images drift): `pip list | grep -iE
+  "gym|shimmy|dm-control|mujoco|torch"` and pin the versions that match the
+  image; requirements are gymnasium >= 0.28, shimmy, dm_control, mujoco,
+  and a CUDA torch.
+- DMC rows are GPU rows. Within-seed teacher checksum pairing holds, but CUDA
+  is not bit-identical to CPU and this machine has no dm_control, so DMC
+  verdicts are adjudicated on the GPU json (stage3). Label the results doc
+  `_gpu` and record `protocol.device`/`gpu_ids`; never merge into a CPU file.

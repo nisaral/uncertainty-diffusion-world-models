@@ -3,25 +3,27 @@
 # (research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md, incl. Amendment 1).
 #
 # Stages (run in order; stage2 refuses to start until the gate is recorded):
-#   stage0 : env + trainer smoke on the GPU host (dm_control via shimmy)
+#   stage0 : env + CUDA smoke on the GPU host (dm_control via shimmy)
 #   stage1 : diagnostic gate - ordinary-arm pilot on GATE_SEEDS, then
 #            udwm.scripts.dmc_gate_ratio prints teacher g*/w* + regime
-#   stage2 : main comparison (seeds, five arms) seed-parallel over GPUs
-#   stage3 : adjudication summary on CPU (summarize_corrected_policy)
+#   stage2 : main comparison (SEEDS x VARIANTS) seed-parallel over GPU_IDS
+#   stage3 : adjudication summary on the merged JSON
 #
-# Env knobs:
+# Env knobs (defaults match the registered study + committed config):
 #   TASK       shimmy DMC id, default dm_control/hopper-hop-v0
-#   CONFIG     config for the task (create from delayed_bimodal_distill.yaml:
-#              env.id = $TASK, max_episode_steps >= 500, gamma ~0.99)
-#   STEPS      env steps per cell, default 3600 (payoff protocol)
-#   GATE_SEEDS pilot seeds for the gate, default "0 1"
-#   SEEDS      main-study seeds, default "0 1 2 ... 29"
-#   GPU_IDS    comma list of CUDA devices, default "0,1"
-#   OUT        merged output path
-#   VARIANTS   main-study arms (registered set, default all five)
+#   CONFIG     task config, default configs/dmc_hopper_distill.yaml (committed)
+#   STEPS      env steps per seed, default 3600 (payoff protocol)
+#   GATE_SEEDS gate pilot seeds (ordinary arm), default "0 1"
+#   SEEDS      main-study seeds, default "0 1 ... 29"
+#   GPU_IDS    comma list of CUDA devices, default "0,1" (2x T4 session);
+#              single-GPU sessions MUST set GPU_IDS=0
+#   OUT        merged output path, default runs/dmc_payoff_30seed_gpu.json
+#   VARIANTS   main-study arms (registered set), default all five
+#   PILOT      gate pilot output path, default runs/dmc_gate_pilot.json
 #
-# Register first: the preregistration (and any amendment) is committed before
-# compute. This script does not change endpoints/seeds/arms.
+# Resume semantics: per-seed partial files are written atomically per arm;
+# re-running stage1/stage2 skips completed seeds, so a dropped Kaggle session
+# is recoverable by re-running the same stage.
 set -euo pipefail
 
 TASK="${TASK:-dm_control/hopper-hop-v0}"
@@ -34,24 +36,37 @@ OUT="${OUT:-runs/dmc_payoff_30seed_gpu.json}"
 VARIANTS="${VARIANTS:-ordinary hybrid lagged_hybrid identified_hybrid identified_eq}"
 PILOT="${PILOT:-runs/dmc_gate_pilot.json}"
 
+n_gpus() {
+  local n=0 g
+  for g in ${GPU_IDS//,/ }; do n=$((n + 1)); done
+  echo "$n"
+}
+
 stage0() {
-  echo "[dmc:stage0] smoke: env space + one MBPO step on $TASK (device cuda)"
+  echo "[dmc:stage0] smoke: env spaces on $TASK (CUDA)"
+  if [ ! -f "$CONFIG" ]; then
+    echo "[dmc:stage0] missing config: $CONFIG (committed config expected; clone fresh)." >&2
+    exit 1
+  fi
   python -c "
 import torch, udwm.envs.registry as reg
-assert torch.cuda.is_available(), 'CUDA unavailable'
+assert torch.cuda.is_available(), 'CUDA unavailable (GPU session off?)'
 e = reg.make_env('$TASK')
 print('space:', reg.space_info(e))
-print('smoke ok: env + spaces')
+print('smoke ok: env + spaces | cuda devices:', torch.cuda.device_count())
 "
-  echo "[dmc:stage0] next: create $CONFIG from configs/delayed_bimodal_distill.yaml"
-  echo "  (env.id: $TASK, max_episode_steps >= 500, gamma ~0.99), then re-run stage1."
+  echo "[dmc:stage0] ok. Next: stage1 (diagnostic gate - mandatory before stage2)."
 }
 
 stage1() {
-  echo "[dmc:stage1] gate pilot: ordinary arm only on seeds: ${GATE_SEEDS}"
+  ng=$(n_gpus)
+  nseeds=$(echo "$GATE_SEEDS" | wc -w)
+  njobs=$(( ng < nseeds ? ng : nseeds ))
+  if [ "$njobs" -lt 1 ]; then njobs=1; fi
+  echo "[dmc:stage1] gate pilot: ordinary arm only, seeds: ${GATE_SEEDS} | jobs=${njobs} | gpus=${GPU_IDS}"
   python -m udwm.scripts.run_policy_2x2_split_seeds \
     --config "$CONFIG" --seeds $GATE_SEEDS --variants ordinary \
-    --steps "$STEPS" --jobs 2 --threads 2 --device cuda \
+    --steps "$STEPS" --jobs "$njobs" --threads 2 --gpu-ids "$GPU_IDS" \
     --out "$PILOT"
   echo "[dmc:stage1] gate ratio (teacher g*/w* under the live critic):"
   python -m udwm.scripts.dmc_gate_ratio --data "$PILOT"
@@ -62,8 +77,7 @@ stage2() {
     echo "[dmc:stage2] refusing: gate pilot not found ($PILOT). Run stage1 first." >&2
     exit 1
   fi
-  read -ra GPUS <<< "${GPU_IDS//,/ }"
-  njobs="${#GPUS[@]}"
+  njobs=$(n_gpus)
   echo "[dmc:stage2] main comparison: ${njobs} worker(s) on ${GPU_IDS}, seeds: ${SEEDS}"
   echo "  variants: ${VARIANTS} | steps: ${STEPS} | out: ${OUT}"
   python -m udwm.scripts.run_policy_2x2_split_seeds \
@@ -74,7 +88,7 @@ stage2() {
 }
 
 stage3() {
-  echo "[dmc:stage3] adjudication summary (CPU):"
+  echo "[dmc:stage3] adjudication summary (CPU aggregation of the GPU rows):"
   python -m udwm.scripts.summarize_corrected_policy --data "$OUT"
 }
 
