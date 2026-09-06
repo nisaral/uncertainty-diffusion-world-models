@@ -212,70 +212,80 @@ the launcher falls back to one worker.
 
 ### Notebook cells (copy each block into its own cell)
 
-`!cd` and `!export` do not persist between cells. Use `%cd` (a magic, it
-persists) and set env vars in a Python cell via `os.environ`. The launcher
-defaults already match the registered study, so most cells need no overrides.
+Use `%%bash` cells, NOT `!cmd` lines: pasting from a chat/markdown renderer
+often adds leading whitespace, and an indented `!cmd` becomes an
+`IndentationError` in a Python cell. A `%%bash` body tolerates indentation
+(bash ignores leading spaces), and each cell below is self-contained
+(`cd`/`export` repeat per cell because shell state does not persist between
+cells). The launcher defaults already match the registered study, so only
+`GPU_IDS` is ever overridden (`0,1` for 2x T4; set `0` on a single-GPU
+session).
 
-```python
-# Cell 0 - clone + cwd (persists via %cd)
-!git clone https://github.com/nisaral/uncertainty-diffusion-world-models
-%cd /kaggle/working/uncertainty-diffusion-world-models
-!git log --oneline -1
+```bash
+%%bash
+# Cell 0 - clone/update the repo
+cd /kaggle/working
+[ -d uncertainty-diffusion-world-models ] || git clone https://github.com/nisaral/uncertainty-diffusion-world-models
+cd uncertainty-diffusion-world-models
+git pull --ff-only
+git log --oneline -1
+```
+
+```bash
+%%bash
+# Cell 1 - deps + CUDA sanity (pip no-ops on packages Kaggle already ships;
+# shimmy bridges dm_control -> gymnasium for udwm.envs.registry)
+pip install -q gymnasium numpy dm_control mujoco shimmy pyyaml tqdm
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+python -c "import torch; print('cuda', torch.cuda.is_available(), '| devices', torch.cuda.device_count())"
+```
+
+```bash
+%%bash
+# Cell 2 - stage0 smoke: env spaces + CUDA (fix installs here if it fails)
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+GPU_IDS=0,1 bash dmc_payoff.sh stage0
+```
+
+```bash
+%%bash
+# Cell 3 - stage1 diagnostic gate (mandatory; prints teacher g*/w* + regime)
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+GPU_IDS=0,1 bash dmc_payoff.sh stage1
+# Record the regime in research/RESULTS-DMC-PAYOFF-*.md BEFORE stage2.
+```
+
+```bash
+%%bash
+# Cell 4 - stage2 sanity subset (10 seeds) before the full 30
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+GPU_IDS=0,1 SEEDS="0 1 2 3 4 5 6 7 8 9" OUT=runs/dmc_payoff_10seed_gpu.json bash dmc_payoff.sh stage2
+```
+
+```bash
+%%bash
+# Cell 5 - stage2 full run, 30 seeds (resume-safe: re-running this cell after
+# a dropped session skips completed per-seed partials)
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+GPU_IDS=0,1 bash dmc_payoff.sh stage2
+```
+
+```bash
+%%bash
+# Cell 6 - stage3 adjudication summary (CPU aggregation of the GPU rows)
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=/kaggle/working/uncertainty-diffusion-world-models
+bash dmc_payoff.sh stage3
 ```
 
 ```python
-# Cell 1 - launcher env (2x T4). Single-GPU session: GPU_IDS = "0"
-import os
-os.environ["PYTHONPATH"] = "/kaggle/working/uncertainty-diffusion-world-models"
-os.environ["GPU_IDS"] = "0,1"
-os.environ["OUT"] = "runs/dmc_payoff_30seed_gpu.json"
-import torch
-print("cuda:", torch.cuda.is_available(), "| devices:", torch.cuda.device_count())
-```
-
-```python
-# Cell 2 - deps. torch/gymnasium/numpy already ship on Kaggle (pip no-ops if
-# satisfied); shimmy bridges dm_control -> gymnasium for udwm.envs.registry.
-!pip install -q gymnasium numpy dm_control mujoco shimmy pyyaml tqdm
-```
-
-```python
-# Cell 3 - stage0 smoke: env spaces + CUDA (~1 min). Fix installs here if it fails.
-!bash dmc_payoff.sh stage0
-```
-
-```python
-# Cell 4 - stage1 diagnostic gate (mandatory). 2 seeds, ordinary arm.
-!bash dmc_payoff.sh stage1
-# Prints per-seed teacher g*/w* and the pre-committed regime; stage2 refuses
-# to start until runs/dmc_gate_pilot.json exists. Record the regime in the
-# results doc (research/RESULTS-DMC-PAYOFF-*.md) BEFORE the full comparison.
-```
-
-```python
-# Cell 5 - stage2 sanity subset (10 seeds) before the full 30
-import os
-os.environ["SEEDS"] = "0 1 2 3 4 5 6 7 8 9"
-os.environ["OUT"] = "runs/dmc_payoff_10seed_gpu.json"
-!bash dmc_payoff.sh stage2
-```
-
-```python
-# Cell 6 - stage2 full run, 30 seeds. Resume-safe: after a dropped session,
-# re-running this cell skips completed per-seed partials.
-import os
-os.environ["SEEDS"] = "0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29"
-os.environ["OUT"] = "runs/dmc_payoff_30seed_gpu.json"
-!bash dmc_payoff.sh stage2
-```
-
-```python
-# Cell 7 - stage3 adjudication summary (CPU aggregation of the GPU rows)
-!bash dmc_payoff.sh stage3
-```
-
-```python
-# Cell 8 - download the merged json(s) for runs/ + the results doc
+# Cell 7 - download the merged json(s) for runs/ + the results doc
+# (keep this python cell at column 0 - no leading spaces)
 from IPython.display import FileLink
 FileLink("runs/dmc_payoff_30seed_gpu.json")
 ```
