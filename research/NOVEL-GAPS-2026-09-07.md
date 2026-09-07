@@ -172,3 +172,17 @@ needs a small CPU run, or needs the Kaggle DMC staging.
    G0/G1 machinery.
 4. G2, G3, G4: design-level until the DMC verdict lands; G4's gate-mode axis
    should be fixed in the DMC payoff registration before it runs, not after.
+
+## Status log (2026-09-07)
+
+- G7: **registered + adjudicated** (`research/RESULTS-NORMALIZATION-CONTROL-
+  2026-09-07.md`). Verdict: both primary bars fail -> normalization, not
+  lagging, drove the 0.92 -> 0.28 w_rmse gap; w claim rank-only; within-cell
+  lag effects null at N=10 while standardization lifts u_rank +0.11 (10/10 in
+  both cells). Re-opened the combined-fix Bar-2 attribution (carried by
+  `normalize_values`). Follow-up G9 re-adjudication with in-file baselines
+  registered (`research/NORMALIZATION-CONTROL-READJUDICATION-
+  PREREGISTRATION-2026-09-07.md`).
+- G8: still the only mechanism-level open item with an unclosed empirical
+  attribution (EMA-at-parity annihilation as capacity competition); theory
+  target, toy + width sweep, needs its own pre-registration before running.

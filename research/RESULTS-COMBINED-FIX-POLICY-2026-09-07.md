@@ -145,3 +145,44 @@ correct phrasing everywhere is "met parity and then some on a ceiling-bound
 benchmark", never "beats". The confirmed, non-ceiling effects remain Bar 2
 (vs identified_eq, +0.071, 8/10) and the w-hole closing. Method:
 `numpy.random.default_rng(0)`, 20,000 draws.
+
+## G7 addendum (2026-09-07): normalization-controlled re-read of Bar 2 and
+the w-hole closing
+
+The registered G7 control (`research/RESULTS-NORMALIZATION-CONTROL-
+2026-09-07.md`, N=10, all four cells in one file) holds the normalization
+knob fixed across the lag axis and toggles ONLY `distill_normalize_values`
+within each lag cell. Its pre-committed bars **both fail** (D - A and C - B
+w_rmse CIs include 0), and its descriptive within-cell lag contrasts on
+u_rank are null (-0.0011 and -0.0007, CIs include 0, 6/10 each) while
+standardization alone moves u_rank +0.11 (10/10 in both cells). Consequence
+for THIS table, stated precisely:
+
+1. **Bar 2 (+0.0707 vs identified_eq) was measured across a contrast that
+   changed normalization as well as the lag axis.** G7 shows the +0.07 is
+   carried by `normalize_values`, not by the target-critic map: within-cell,
+   lagging adds ~0 at N=10 (DelayedBimodal). The sentence "lagging adds a
+   confirmed +0.07 on top of the equal-weight correction" is withdrawn; the
+   supported sentence is "the registered lagged configuration (slow map +
+   standardization + guard/warmup) adds +0.07 over the live unstandardized
+   configuration; with standardization held fixed the lag axis is not
+   separable from zero at N=10".
+2. **The w-hole closing is a scale artifact of standardization.** The
+   -0.639 w_rmse contrast (lagged_identified_eq vs identified_eq) collapses
+   to -0.025 (C - B, CI includes 0) with normalization held fixed. The
+   combined-fix record's w_rmse column is superseded for causal attribution:
+   w-scale language is dropped; the w claim is rank endpoints only
+   (scale-free, Theorem 6). The ddof note in `research/proofs/
+   identifiability-frontier.md` (25% inflation at N=5) is unchanged but is
+   now moot for attribution.
+3. **What stands.** Parity claims vs ordinary/lagged_hybrid (scale-free
+   u_rank, ceiling-bound, unchanged), the mechanism contrasts at fixed
+   configs (M=1 vs M>=2, EMA collapse vs equal weight), and Theorem 7 C7.2
+   as a deterministic theory identity. What changes is the empirical
+   arm-to-term attribution: in this benchmark at N=10 the active knob that
+   lifts identified_eq (0.84-0.88) to the ~0.95 ceiling is value-target
+   standardization, and it does so on the LIVE critic (`identified_eq_norm`
+   0.9524 vs `lagged_identified_eq` 0.9517 in the G7 file). A within-file
+   re-adjudication that carries the baselines (ordinary / hybrid /
+   lagged_hybrid) alongside all four G7 cells is registered as G9
+   (`research/NORMALIZATION-CONTROL-READJUDICATION-PREREGISTRATION-2026-09-07.md`).

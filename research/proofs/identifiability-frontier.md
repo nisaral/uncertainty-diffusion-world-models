@@ -326,6 +326,24 @@ while the slow-map arm reaches parity) is open item 1 below.
    gate preregistration (`DMC-PAYOFF-PREREGISTRATION-2026-09-05.md`) measures
    `g*/w*` under the DMC-trained critic before adjudicating arms.
 
+**Closure notes (2026-09-07).**  Open item 1's discriminator ran: the G7
+normalization-controlled contrast (`research/RESULTS-NORMALIZATION-CONTROL-
+2026-09-07.md`, N=10, all four cells in one file) shows the w-RMSE gap and
+the u-rank gap between the registered live-eq and lagged-eq configurations
+are carried by candidate mechanism (ii) - the `normalize_values` knob - not
+by the lag axis: within-cell lag contrasts are null (u_rank -0.0011 and
+-0.0007, CIs include 0) while standardization alone moves u_rank +0.11
+(10/10 in both cells). Candidate (i) (train/eval distribution shift under the
+fast map) is not excluded by G7 but is not needed to explain the measured
+gap at N=10 on DelayedBimodal. The measured arm-to-term mapping table in
+Theorem 7 is re-read in the combined-fix record's G7 addendum: standardization
+is the empirically active knob (and it acts on the live critic); Theorem 7
+C7.2 remains a deterministic identity about the drift term, not an empirical
+attribution. Open item 2 (EMA-at-parity) is now the only mechanism-level open
+item with an unclosed empirical attribution (candidate: capacity competition
+between the w and g channels under shared trunk parameters, with the epistemic
+up-weight and Adam as aggravators; novel-gap G8).
+
 ## What the paper may cite from here
 
 - Theorem 1: the M = 1 objective cannot identify the sign or magnitude of the

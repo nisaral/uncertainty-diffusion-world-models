@@ -129,3 +129,43 @@ claim reassessments. The positioning constraint stands - headline is the
 distillation-identifiability mechanism; MACURA/AAAI-Liu/ELVIS/GIRL are cited
 whenever the payoff story is told, and Biased Dreams is the sibling negative
 that motivates why the mechanism-level claim is the durable one.
+
+## Third pass (2026-09-07, while the DMC budget probe runs): no collision,
+one new adjacent item, two lead updates
+
+Searches rerun for anything new through early September 2026 on: diffusion
+world-model distillation that preserves uncertainty (one-step students),
+value-aware model learning, and uncertainty-gated imagination in MBRL.
+
+1. **Refutation condition still unmet.** No paper reports teacher-vs-student
+   decision-relevant uncertainty (UBE local u = w - g after a value map) for
+   distilled one-step diffusion world models at matched NFE. Nearest misses
+   this pass, none colliding: OPTD (arXiv:2608.02942, on-policy transition
+   distillation for few-step diffusion *language* models - no RL
+   uncertainty object); ForgeWM (arXiv:2608.14022, few-step video world
+   models - no decision statistic); Teacher-Feature Drifting
+   (arXiv:2605.07327v2, one-step distillation in feature space - no
+   uncertainty claim); Diffusion Distillation for Efficient Weather Ensembles
+   (arXiv:2608.27728, already logged: energy-distance one-step marginal
+   matching, no decision object).
+2. **New adjacent item (classifier side), cite only as "distillation of
+   ensemble uncertainty is active outside RL".** Credal Ensemble Distillation
+   (AAAI 2026, DOI 10.1609/aaai.v40i31.39837) distills an ensemble into a
+   single credal-set classifier (interval probabilities). No value map, no
+   w/g split, no RL - same family as the memo's GROUP 5 lines; supports the
+   claim that the classifier-side distillation-of-uncertainty line is active
+   while the post-value-map RL side is not.
+3. **Valdi (arXiv:2607.00917) still v1 as of 2026-09-07** (paper.dou.ac
+   shows 2607.00917v1, 2026-07-01; code released at
+   github.com/Kit115/ValueDiffusionWorldModels). The memo's claim that the
+   paper lists distillation from multi-step teachers to one-step students as
+   future work stands; re-check before submission.
+4. **RACTD (arXiv:2506.07822) updated to v2 (2025-12-25)**; review-note
+   aggregations place it at ICLR 2026, which is NOT authoritative - cite as
+   arXiv with the v2 date, and verify the venue before submission. Still a
+   nearest-miss (reward-aware consistency distillation of diffusion
+   *planners*, not a world model; no uncertainty object).
+5. **Unverified lead unchanged after a second attempt.** "Normalized
+   ensemble Q-learning (OpenAI)" still has no locatable primary source
+   (arXiv/OpenAI pages/aggregators: zero hits on 2026-09-07). Stays in the
+   do-not-cite section; G4's design must not assume its direction.
