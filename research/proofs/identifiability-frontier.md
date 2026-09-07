@@ -297,6 +297,46 @@ carry that confound and are the adjudicated endpoints.  The fast-map coupling
 mechanism itself (why the live-critic eq arm's u-rank deficit is confirmed
 while the slow-map arm reaches parity) is open item 1 below.
 
+## Proposition 8 (level-set geometry; the `epsilon`-identifiability gap)
+
+**Setup.**  For a student pair `(w_s, g_s)` write the single-latent statistic
+`S_s = w_s + c g_s` with `c = (1-rho)(N-1)/N`.  The M = 1 population risk
+(the repo's `value_variance` term at one shared latent) depends on the pair
+only through `S_s`; the M >= 2 equal-weight risk is
+`R_2 = (w_s - w*)^2 + (g_s - g*)^2`.
+
+**Statement.**
+1. **M = 1 level sets are S-strips.**  For any risk level `eps` the M = 1
+   sublevel set is `{|S_s - S*| <= sqrt(eps)}` (a strip of width
+   `2 sqrt(eps)/sqrt(1 + c^2)` in the `(w, g)` plane); at `eps = 0` it is the
+   fibre line `S_s = S*`.  Along that line the decision statistic
+   `u = w - g` ranges over an interval of length at least `2 S*`
+   (`u in [-S*/c, S*]` under `w, g >= 0`, verified: span `>= 2S*` and a sign
+   flip for every regime teacher).  Worst-case decision error for a student
+   that matches the teacher's statistic exactly is `>= S*` for every regime
+   teacher (verified: measured DelayedBimodal `S* = 0.0128`, fibre span
+   `80.1`, worst case `80.1`).
+2. **M >= 2 level sets are disks.**  `{R_2 <= eps}` is a disk of radius
+   `sqrt(eps)` centred on the truth, and since `u = w - g`,
+   `|u_s - u*| <= sqrt(2 eps)` over the whole sublevel set, with the bound
+   tight (attained at `dw = -dg`; verified: at `eps = 1e-6` the sampled max
+   is `0.001414 = sqrt(2e-6)`).  Identifiability is therefore quantitative:
+   the decision statistic is recovered with rate `sqrt(eps)` and coefficient
+   `sqrt(2)`.
+3. **The gap does not close.**  At matched population risk `eps -> 0` the
+   M = 1 worst-case `u`-error stays `~` the fibre span (order `S*/c` on an
+   aleatoric-dominated map) while the M >= 2 error is `<= sqrt(2 eps)`.
+   Verified on the measured DelayedBimodal map: at
+   `eps = 1.6e-14` the ratio is `>= 4.4e8`.  This is the formal content of
+   "one number, two unknowns": no amount of optimization on the M = 1
+   objective shrinks the decision-statistic uncertainty below the fibre, and
+   every positive result about preserved `u` under M = 1 must therefore be
+   attributed to anchors/initialization/regularization, never to the loss.
+
+**Verification:** `theory/identifiability_frontier.py` Part 8 (deterministic,
+P8a-P8c all PASS, 2026-09-07).  Recorded in
+`research/RESULTS-THEORY-FRONTIER-2026-09-07.md`.
+
 ## Open items (conjectures, not theorems)
 
 1. **Moving-map coupling.**  Why the live-critic equal-weight arm leaves a
@@ -361,3 +401,9 @@ up-weight and Adam as aggravators; novel-gap G8).
   removes the map-drift term (C7.2, verified) - is the formal content of
   "the two fixes compose".  C7.1's fibre-memory check is also the precise
   reason lagged-hybrid parity is not a loss-level guarantee.
+- Proposition 8: the M = 1 objective's sublevel sets are S-strips, so its
+  decision-statistic uncertainty does not shrink as the population risk goes
+  to zero (worst-case error >= S*, sign flip), while the M >= 2 loss
+  identifies with rate sqrt(eps) and tight coefficient sqrt(2) - the formal
+  "can/cannot identify" statement of the paper's mechanism claim, with a
+  quantitative separation that survives eps -> 0.

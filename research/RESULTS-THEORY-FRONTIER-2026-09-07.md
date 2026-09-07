@@ -84,3 +84,26 @@ payoff design makes the gate an explicit arm axis.
 
 Deterministic (fixed seed), numpy only, ~5 s (Parts 1-7). All checks PASS
 (2026-09-07; full re-run after the Theorem 7 / Part 7 addition).
+
+## Addendum (2026-09-07): Proposition 8 verified (Part 8 added)
+
+Formal statement in `research/proofs/identifiability-frontier.md`
+(Proposition 8): the M=1 population risk depends on the student pair
+`(w_s, g_s)` only through the single-latent statistic `S_s = w_s + c g_s`, so
+its sublevel sets are S-strips and the decision-statistic uncertainty does
+not shrink as the population risk goes to zero; the M>=2 equal-weight loss
+identifies with rate `sqrt(eps)` and tight coefficient `sqrt(2)`.
+
+Part 8 of the verifier (deterministic, fixed seed, run 2026-09-07 after the
+rows of the G7 control existed but independent of them):
+
+- P8a PASS: M=1 zero-loss u-uncertainty spans >= 2S* with a sign flip and
+  worst-case decision error >= S* for every regime teacher (measured
+  DelayedBimodal map: S* = 0.0128, fibre span 80.12, worst case 80.12).
+- P8b PASS: M>=2 sublevel disk bound tight: at eps = 1e-6 the sampled max
+  |u - u*| = 0.001414 = sqrt(2 eps) exactly.
+- P8c PASS: at matched eps = 1.6e-14 the M=1 worst-case error stays ~ the
+  fibre span (80.1) while M>=2 is <= 1.8e-7; ratio >= 4.4e8. The gap is
+  unbounded as eps -> 0.
+
+Runtime ~8 s for Parts 1-8. Full re-run: all checks PASS.

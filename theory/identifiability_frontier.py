@@ -62,6 +62,18 @@ What this file verifies numerically (all mirrors of the udwm estimators):
     M>=2 loss) plus the map drift over the window (removed by lagging): the
     two fixes act on disjoint error terms.
 
+  Proposition 8 (level-set geometry; the epsilon-identifiability gap)
+    The M=1 population risk depends on the student pair (w_s, g_s) only
+    through the single-latent statistic S_s = w_s + c g_s, so its sublevel
+    sets are S-strips (lines at zero loss): one number, two unknowns, in the
+    level-set sense.  At zero population risk the decision statistic u is
+    still only known up to an interval of length >= 2S* (worst-case decision
+    error >= S* for every regime teacher, with sign flip).  The M>=2
+    equal-weight loss has elliptical level sets centered on the truth:
+    at population risk eps, |u - u*| <= sqrt(2 eps) - identifiability with
+    rate sqrt(eps), coefficient sqrt(2), tight.  The gap between the two
+    does not close as eps -> 0.
+
 Run (from repo root)::
 
     python theory/identifiability_frontier.py
@@ -463,7 +475,112 @@ def part7_composition():
         and np.median(abs(resids - drifts)) < 1e-2 * drifts.mean(),
         detail=f"median |resid - drift| = "
                f"{np.median(abs(resids - drifts)):.2e}; max opt gap "
-               f"{gaps.max():.2e}; mean drift {drifts.mean():.3f}")
+              f"{gaps.max():.2e}; mean drift {drifts.mean():.3f}")
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# Part 8 -- Proposition 8: level-set geometry and the epsilon-identifiability
+# gap.  The M=1 population risk depends on the student pair (w_s, g_s) only
+# through the single-latent statistic S_s = w_s + c g_s (c = (1-rho)(N-1)/N),
+# so its sublevel sets are S-strips: at zero population risk the decision
+# statistic u = w - g is still only known up to an interval of length >= 2S*
+# (worst-case decision error >= S* for every regime teacher).  The M>=2
+# equal-weight loss has elliptical level sets centered on the truth: at
+# population risk epsilon, |u - u*| <= sqrt(2 epsilon), i.e. identifiability
+# with rate sqrt(epsilon).  The gap between the two does not close as
+# epsilon -> 0.
+# ---------------------------------------------------------------------------
+
+def part8_level_sets():
+    print("=" * 92)
+    print("PART 8 -- Proposition 8: the M=1 objective is a function of the")
+    print("          pair (w,g) only through S = w + c g (level sets are")
+    print("          lines); M>=2 identifies with rate sqrt(eps).")
+    print("=" * 92)
+    ok = True
+    teachers = {
+        "balanced": (np.array([-0.6, -0.2, 0.0, 0.3, 0.5]), 0.6, 0.3),
+        "aleatoric-dominated": (0.1 * np.array([-0.6, -0.2, 0.0, 0.3, 0.5]), 2.0, 0.5),
+        "epistemic-dominated": (3.0 * np.array([-0.6, -0.2, 0.0, 0.3, 0.5]), 0.1, 0.1),
+        "measured-DelayedBimodal": (
+            1e-3 * np.array([-0.6, -0.2, 0.0, 0.3, 0.5]), 8.95, 0.9998),
+    }
+    worst_rows = []
+    for name, (d_t, sigma_t, rho_t) in teachers.items():
+        w_t, g_t, sb_t, s_pop = population(d_t, sigma_t, rho_t)
+        u_t = w_t - g_t
+        c = (1.0 - rho_t) * (N - 1.0) / N
+        # Analytic fibre family (Theorem 1): for alpha in (0,1),
+        #   w_s = alpha S*,  g_s = (1-alpha) S* / c  =>  S_s = S*,
+        #   u_s = S* [alpha - (1-alpha)/c].
+        alphas = np.linspace(1e-6, 1.0 - 1e-6, 200_000)
+        u_s = s_pop * (alphas - (1.0 - alphas) / c)
+        u_min, u_max = float(u_s.min()), float(u_s.max())
+        span = u_max - u_min
+        # Worst-case decision error for a student that matches S exactly:
+        # the teacher's own u* sits on the fibre, so the worst case is the
+        # far end of the interval.
+        worst = max(abs(u_min - u_t), abs(u_max - u_t))
+        sign_flip = bool((u_s > 0).any() and (u_s < 0).any())
+        worst_rows.append((name, s_pop, span, worst, sign_flip))
+        ok &= (span >= 2.0 * s_pop - 1e-9) and sign_flip and worst >= s_pop
+        print(f"  {name:>24}: S* = {s_pop:9.4f} | fibre u in "
+              f"[{u_min:+9.3f}, {u_max:+9.3f}]  span = {span:9.4f} "
+              f"(>= 2S*: {span >= 2.0*s_pop - 1e-9})  "
+              f"worst-case |u-u*| >= {worst:9.4f} (>= S*: {worst >= s_pop})  "
+              f"sign-flip {sign_flip}")
+    check("P8a M=1 zero-loss u-uncertainty spans >= 2S* with sign flip and "
+          "worst-case decision error >= S* for every regime teacher", ok)
+
+    # P8b: M>=2 equal-weight loss, target (w*, g*), risk R = (w-w*)² + (g-g*)².
+    # Sublevel set {R <= eps} is a disk of radius sqrt(eps); u = w - g, so
+    # max |u - u*| over the disk = sqrt(2 eps) (attained at dw = -dg).
+    rng = np.random.default_rng(SEED + 8)
+    eps = 1e-6
+    r_max = np.sqrt(eps)
+    ang = rng.uniform(0.0, 2.0 * np.pi, 2_000_000)
+    rad = r_max * np.sqrt(rng.uniform(0.0, 1.0, 2_000_000))
+    dw = rad * np.cos(ang)
+    dg = rad * np.sin(ang)
+    du = np.abs(dw - dg)
+    bound = np.sqrt(2.0 * eps)
+    ok_b = du.max() <= bound * (1.0 + 1e-6) and du.max() >= bound * (1.0 - 1e-2)
+    check("P8b M>=2 sublevel disk: |u - u*| <= sqrt(2 eps) with the bound "
+          "tight (rate sqrt(eps); coefficient sqrt(2))",
+          ok_b, detail=f"max |du| over {{R <= {eps}}} = {du.max():.6f} vs "
+                       f"sqrt(2 eps) = {bound:.6f}")
+    ok &= ok_b
+
+    # P8c: the gap does not close as eps -> 0.  At matched small eps the M>=2
+    # error is <= sqrt(2 eps) while the M=1 error over its eps-strip is still
+    # ~ the fibre span (the strip is narrow in S but long along the fibre).
+    name = "measured-DelayedBimodal"
+    d_t, sigma_t, rho_t = teachers[name]
+    w_t, g_t, sb_t, s_pop = population(d_t, sigma_t, rho_t)
+    u_t = w_t - g_t
+    c = (1.0 - rho_t) * (N - 1.0) / N
+    eps = 1e-10 * s_pop ** 2
+    # M=1 sublevel strip: |S_s - S*| <= sqrt(eps).  On the fibre family the
+    # strip admits alphas with |S_s - S*| = |w_s + c g_s - S*| <= sqrt(eps);
+    # the retained u-range is the fibre span minus O(sqrt(eps)) edge loss.
+    alphas = np.linspace(1e-9, 1.0 - 1e-9, 4_000_000)
+    w_s = alphas * s_pop
+    g_s = (1.0 - alphas) * s_pop / c
+    s_s = w_s + c * g_s
+    mask = np.abs(s_s - s_pop) <= np.sqrt(eps)
+    u_kept = (w_s - g_s)[mask]
+    m1_err = max(abs(u_kept.min() - u_t), abs(u_kept.max() - u_t))
+    m2_err = np.sqrt(2.0 * eps)
+    ok_c = (u_kept.max() - u_kept.min()) >= 0.99 * (s_pop * (1.0 + 1.0 / c)) \
+        and m1_err >= 1e3 * m2_err
+    check("P8c the identifiability gap is unbounded as eps -> 0: at matched "
+          "small eps the M=1 worst-case error stays ~ the fibre span while "
+          "M>=2 is <= sqrt(2 eps)",
+          ok_c, detail=f"M=1 worst-case |u-u*| >= {m1_err:.4e} vs M>=2 "
+                       f"<= {m2_err:.4e} at eps = {eps:.2e} "
+                       f"(ratio >= {m1_err / max(m2_err, 1e-300):.1e})")
+    ok &= ok_c
     return ok
 
 
@@ -475,5 +592,6 @@ if __name__ == "__main__":
     part5_ema_inversion()
     part6_gating_robustness()
     part7_composition()
+    part8_level_sets()
     print("=" * 92)
     print("Done. Companion doc: research/proofs/identifiability-frontier.md")
