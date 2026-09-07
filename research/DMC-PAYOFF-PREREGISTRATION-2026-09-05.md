@@ -226,3 +226,44 @@ log/checkpoint dirs distinct from probe and sanity paths. A 15k payoff (if
 chosen over 30k) uses `configs/dmc_hopper_probe.yaml` with the payoff arm
 list. The registered decision rule and all six arms + the gate-off control
 carry over unchanged.
+
+## Amendment 2 (ACTIVATED 2026-09-08): 15,000-step adjudication budget
+
+The budget probe completed (`research/RESULTS-DMC-BUDGET-PROBE-2026-09-08.md`)
+and its pre-committed rule fired: mean(seeds 0-1) u_rank at 15k is 0.925
+(ordinary) and 0.856 (lagged_hybrid), both >= 0.70 and both well above their
+3.6k floors (0.454 / 0.574), so the 3,600-step operating point is the
+registered budget confound. Amendment 2 is therefore activated as follows:
+
+1. **Budget: 15,000 env steps** (15 episodes; `configs/dmc_hopper_probe.yaml`,
+   `eval_freq: 3000`, identical to the DMC config otherwise) for the gate,
+   sanity, and 30-seed adjudication. Chosen over 30k because (i) baseline
+   u_rank has already reached the 0.86-0.93 band by 15k, so the u_rank bars
+   have room and the confound is removed; (ii) returns remain floor-bound on
+   seed 1 at 15k, so the return thread is NOT adjudicated at 15k either - it
+   is deferred (item 5); (iii) the 30k staged config stays available for the
+   return extension. The staged `configs/dmc_hopper_payoff_30k.yaml` remains
+   pre-committed for that extension.
+2. **Gate (re-measured, no new training).** The probe's ordinary-arm rows at
+   15k (seeds 0-1, same eval states) give teacher g*/w* = 10,973 / 17,612,
+   median 14,292 - aleatoric-dominated regime confirmed at the amended
+   operating point; the pre-committed aleatoric branch carries over.
+3. **Sanity.** 10-seed x six-arm run at 15k (`runs/dmc_sanity_15k_gpu.json`)
+   supersedes the 3.6k sanity file for adjudication reads. Never mix rows
+   across budgets in one table.
+4. **Adjudication.** 30-seed x six-arm run at 15k
+   (`runs/dmc_payoff_30seed_15k_gpu.json`) with the registered endpoints,
+   bars, and pre-commitments of this registration (u_rank >= 0.70 on >= 70%
+   of seeds; eq beats hybrid on >= 70% of seeds; gap to ordinary/lagged_hybrid
+   reported as transfer magnitude) plus the gate-off control
+   (`ordinary_gate_off`, `runs/dmc_payoff_30seed_15k_gpu_ctrl.json`) per
+   Addendum 4.
+5. **Return thread (deferred, conditional).** If the 30-seed mechanism
+   verdict is positive, the return-payoff adjudication runs at 30k under the
+   staged config (this amendment pre-commits that extension's budget, arms,
+   and bars; the probe's seed-1 floor at 15k is the documented reason 15k
+   cannot adjudicate returns on hopper-hop).
+
+The 3,600-step DMC rows (`runs/dmc_payoff_10seed_gpu.json`) are superseded
+for adjudication by this amendment; they remain as the historical record of
+the budget-confound discovery and are never quoted as adjudicated numbers.
