@@ -137,3 +137,35 @@ budget"; the 30-seed adjudication is held pending the registered budget probe
    contrast - closes the Theorem 7 caveat) and G8 (EMA-at-parity capacity-
    competition theory target) are in
    `research/NOVEL-GAPS-2026-09-07.md`.
+
+## Addendum 2026-09-08: G7/G9 attribution + DMC budget-probe verdict
+
+1. **G7 adjudicated (N=10, DelayedBimodal, one file): the w_rmse gap and the
+   combined-fix Bar-2 u-rank gap are normalization-carried, not lag-carried.**
+   Both pre-registered primary bars failed (D - A and C - B w_rmse CIs
+   include 0); within-cell lag contrasts on u_rank are null (-0.0011,
+   -0.0007) while `normalize_values` alone moves u_rank +0.11 (10/10, both
+   cells) and w_rmse -0.8..-0.9 (10/10). Consequence: w-scale language is
+   dropped (rank-only) and the combined-fix record is re-read via its G7
+   addendum. [RESULTS-NORMALIZATION-CONTROL-2026-09-07.md]
+   (RESULTS-NORMALIZATION-CONTROL-2026-09-07.md)
+2. **G9 re-adjudication (N=10, in-file baselines): standardization closes
+   the live-eq deficit on the LIVE critic.** `identified_eq_norm` 0.948
+   (10/10 >= 0.70) sits at/above ordinary (0.923) and lagged_hybrid (0.927);
+   mechanism sanity reproduces (eq > hybrid +0.214, 10/10); the lag null
+   replicates (C - B, D - A). The corrected arm-to-term sentence: the
+   equal-weight M>=2 loss + value-target standardization is the empirical
+   fix; the slow target critic adds nothing measurable on DelayedBimodal at
+   N=10 and its contribution is deferred to the DMC verdict.
+   [RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md]
+   (RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md)
+3. **DMC budget probe verdict: confound supported -> Amendment 2 activated.**
+   At 15k (seeds 0-1) baseline u_rank climbs to 0.925 (ordinary) / 0.856
+   (lagged_hybrid) from 0.454/0.574 at 3.6k; identified_eq clears the bar on
+   both seeds (0.766/0.755) and sits >= hybrid; EMA collapse control
+   reproduces (0.132); lagged_identified_eq does NOT top the DMC table
+   (0.634) - the 30-seed verdict is open; returns are floor-bound on seed 1
+   at 15k (return thread deferred). Gate re-measured at 15k: g*/w* median
+   14,292 (aleatoric-dominated). Amendment 2 sets the adjudication budget to
+   15,000 steps; 3.6k DMC rows superseded.
+   [RESULTS-DMC-BUDGET-PROBE-2026-09-08.md](RESULTS-DMC-BUDGET-PROBE-2026-09-08.md)

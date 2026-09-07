@@ -417,3 +417,38 @@ unconfirmed - cite as arXiv) are recorded in
 - "Partial transfer becomes full transfer once both known failure modes are
   addressed" is the DelayedBimodal closer; "transfers across environments
   under an adequate budget" is the DMC verdict still to be earned.
+
+## Addendum 2026-09-08: the empirical attribution changed (G7/G9), and the
+DMC closer is now genuinely open
+
+The registered G7 control and its G9 re-adjudication
+(`research/RESULTS-NORMALIZATION-CONTROL-2026-09-07.md`,
+`research/RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md`) re-read the
+DelayedBimodal arm-to-term mapping: with `normalize_values` held fixed the
+lag axis adds ~0 to u_rank at N=10 (null CIs in both files), while
+standardization alone lifts the equal-weight identified arm to the ceiling
+on the LIVE critic (`identified_eq_norm` 0.948, 10/10 >= 0.70, at/above
+ordinary and lagged_hybrid). Narrative consequences, stated exactly:
+
+1. The DelayedBimodal closer becomes: "equal-weight M>=2 identified
+   distillation preserves the decision-statistic rank at the measured
+   ceiling once value targets are standardized - a training-side knob that
+   acts on the live critic." The lagged-critic sentence is demoted from
+   empirical driver to theory-motivated component: Theorem 7 C7.2 removes
+   the drift term, but the benchmark's live-critic drift is small enough
+   that the lag axis is not separable from zero at N=10; its contribution is
+   an open empirical question that only a fast-map environment can answer.
+2. The DMC verdict is therefore the decisive arm-to-term experiment, not a
+   confirmation run. The budget probe (Amendment 2, 15k) removed the
+   operating-point confound and produced one striking diagnostic (n=2,
+   never adjudicative): `lagged_identified_eq` does NOT top the DMC table at
+   15k (0.634 < identified_eq 0.760 < lagged_hybrid 0.856 <= ordinary 0.925),
+   the reverse of DelayedBimodal. Whatever the 30-seed verdict says, it
+   adjudicates the lag axis where the map actually drifts - the one regime
+   the DelayedBimodal benchmark cannot test.
+3. Mechanism claims at fixed configs are untouched and now carry an in-file
+   reproduction (G9 Bar 4: eq > hybrid +0.214, 10/10). The paper's headline
+   stays the distillation-identifiability mechanism; the w-scale channel is
+   rank-only (G7); Proposition 8 gives the quantitative can/cannot-identify
+   statement (M=1 decision-statistic uncertainty does not shrink as
+   population risk -> 0; M>=2 rate sqrt(eps), tight coefficient sqrt(2)).

@@ -33,14 +33,28 @@ Leverage-fix negative (naive fix does not help): [`research/RESULTS-LEVERAGE-FIX
 Paper-shaped assembly: [`research/PAPER-NARRATIVE.md`](research/PAPER-NARRATIVE.md).
 Reproduction: [`REPRODUCE.md`](REPRODUCE.md).  GPU: [`RUN_ON_GPU.md`](RUN_ON_GPU.md).
 
-Latest (2026-09-07): corrected-weight N-study
-([`research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md`](research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md)),
-combined-fix result
-([`research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md`](research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md)),
-DMC sanity + budget probe
-([`research/RESULTS-DMC-SANITY-2026-09-07.md`](research/RESULTS-DMC-SANITY-2026-09-07.md)),
-and the zero-compute H2/H4 re-analysis
-([`research/RESULTS-H2H4-REANALYSIS-2026-09-07.md`](research/RESULTS-H2H4-REANALYSIS-2026-09-07.md)).
+Latest (2026-09-08): normalization attribution + DMC budget verdict
+- G7/G9 (N=10, one file each): the equal-weight M>=2 fix reaches the
+  measured ceiling once value targets are standardized (`identified_eq_norm`
+  u-rank 0.948, 10/10 >= 0.70, at/above ordinary on the *live* critic); the
+  lagged-critic axis adds ~0 at N=10 on DelayedBimodal. w-scale claims are
+  rank-only. [`research/RESULTS-NORMALIZATION-CONTROL-2026-09-07.md`](research/RESULTS-NORMALIZATION-CONTROL-2026-09-07.md),
+  [`research/RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md`](research/RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md)
+- DMC budget probe (15k, seeds 0-1): baseline u_rank climbs to 0.93/0.86
+  (vs 0.45/0.57 at 3.6k) - the 3.6k budget was the confound; Amendment 2
+  sets the 30-seed adjudication at 15k (running). Diagnostic at n=2:
+  `lagged_identified_eq` does NOT top the DMC table (0.63) - the lag-axis
+  verdict is open. [`research/RESULTS-DMC-BUDGET-PROBE-2026-09-08.md`](research/RESULTS-DMC-BUDGET-PROBE-2026-09-08.md)
+- Theory: Proposition 8 (level-set geometry; the epsilon-identifiability
+  gap) is in the verifier - the M=1 objective's decision-statistic
+  uncertainty does not shrink as population risk -> 0, M>=2 identifies with
+  rate sqrt(eps). [`theory/identifiability_frontier.py`](theory/identifiability_frontier.py)
+
+**Diagnostic artifact (Hugging Face):**
+[`nisaralll/udwm-identifiability-diagnostic`](https://huggingface.co/nisaralll/udwm-identifiability-diagnostic)
+- teacher / broken-EMA / corrected student checkpoints, the theory verifier
+  + proofs, and the adjudicated result tables, framed for researchers
+  working on calibrated model-based RL.
 
 ---
 
