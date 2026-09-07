@@ -84,3 +84,36 @@ budget"; the 30-seed adjudication is held pending the registered budget probe
    conditional-benefit claim is operating-point-bound, consistent with the
    registered budget confound.
    [RESULTS-H2H4-REANALYSIS-2026-09-07.md](RESULTS-H2H4-REANALYSIS-2026-09-07.md)
+
+## Addendum 2026-09-07 (third): identifiability-frontier formalization + DMC protocol
+
+1. **Theory formalized (verified, not hypothesized).** The identifiability
+   identity is upgraded to a theorem set with proofs and a deterministic
+   numeric verification, all checks PASS
+   (`theory/identifiability_frontier.py`):
+   [proofs/identifiability-frontier.md](proofs/identifiability-frontier.md),
+   [RESULTS-THEORY-FRONTIER-2026-09-07.md](RESULTS-THEORY-FRONTIER-2026-09-07.md).
+   Headlines: T1 - the M=1 zero-loss fibre never identifies the sign of the
+   decision statistic `u` (measured map: collapse student `u_s > 0` vs
+   teacher `u* ~ -80` at ~zero loss); T2 - coupling erosion
+   `dS/dg = (1-rho)(N-1)/N` puts the matched statistic at `S*/|u*| = 2.4e-4`
+   on the measured map; P3 + T5 - the aleatoric boundary is sticky
+   (gradient `O(g_s)`, per-state noise `0.76 g*` at M=2, no multiplicative
+   dial escapes, EMA ratio = `(w*/g*)^2 = 7e-9`); T4 - M>=2 has a unique
+   population minimiser and a separation floor `M >~ (A_w+A_g)/(B Delta^2)`;
+   T6 - percentile gating is invariant to monotone score transforms,
+   absolute-threshold gating is not.
+2. **Protocol audit: the policy runs are self-gated.** `u_gate.mode: both`
+   (percentile 0.85 stop+weight via the training-side UBE net) has been
+   active from step 900 since `configs/delayed_bimodal_distill.yaml` was
+   created; all arms gated identically so comparisons stand, but prose must
+   not call these runs ungated and the null payoff reading applies to
+   self-gated training. No table re-adjudicated; the paper must state the
+   protocol as run.
+3. **DMC arm list + gating axis amended (pre-compute).** `lagged_identified_eq`
+   is folded into the DMC study as a primary arm and the budget probe runs the
+   full 6-arm list at 15k steps; a `gate-off` ordinary control arm is added so
+   the payoff contrast separates object quality from gating itself; all gating
+   is percentile (T6). Registration:
+   [DMC-PAYOFF-PREREGISTRATION-2026-09-05.md](DMC-PAYOFF-PREREGISTRATION-2026-09-05.md)
+   (Addendum 3).

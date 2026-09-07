@@ -118,6 +118,40 @@ candidate; the EMA arm remains as the control that reproduces the collapse.
 
 ---
 
+## Addendum 3 (2026-09-07): combined-fix arm folded in; gate made an explicit axis
+
+**Before any budget-probe or 30-seed adjudication row runs**, the DMC arm list
+is amended, following the DelayedBimodal combined-fix N=10 result
+(`research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md`):
+
+1. **`lagged_identified_eq` is added as a primary arm.** It is the top
+   DelayedBimodal configuration (u-rank 0.948, 10/10 >= 0.70; closes
+   identified_eq's confirmed deficit vs ordinary to parity) and is the natural
+   DMC headline arm for the "both known failure modes fixed" claim. The DMC
+   arm list becomes: `ordinary`, `hybrid`, `lagged_hybrid`, `identified_hybrid`
+   (EMA collapse control), `identified_eq`, `lagged_identified_eq`. The
+   budget probe (15k steps, seeds 0-1) runs this full list so the
+   budget-adequate comparison needs no second probe.
+2. **Gating is an explicit axis, not a hidden default.** The base config has
+   run `u_gate.mode: both` (percentile stop+weight, 0.85) from step 900 since
+   creation; the DelayedBimodal tables are self-gated runs and the paper must
+   say so (audit note: `research/RESULTS-THEORY-FRONTIER-2026-09-07.md`). DMC
+   arms therefore gate identically (percentile, fixed rule) and the registered
+   payoff question is read as "does preserved u-rank cash into return under
+   self-gated imagination". A separate `gate-off` control arm (ordinary,
+   `u_gate.mode: off`) is added so the payoff contrast can separate "the
+   uncertainty object helps gating" from "gating itself hurts".
+3. **Scale-robust gating rationale.** Theorem 6 of
+   `research/proofs/identifiability-frontier.md`: percentile thresholds are
+   invariant to strictly increasing score transforms, so a rank-preserving
+   but scale-collapsed student gates identically to the teacher; absolute
+   thresholds silently disable the gate. All gating in this study is
+   percentile-based (config default), held fixed across arms.
+
+No change to endpoints, seeds, or adjudication bars. The budget-probe
+registration (`research/DMC-BUDGET-PROBE-PREREGISTRATION-2026-09-07.md`) now
+carries the amended arm list.
+
 ## Addendum 2 (2026-09-07): 10-seed sanity + gate recorded; no protocol change yet
 
 The DMC 10-seed sanity + gate record exists

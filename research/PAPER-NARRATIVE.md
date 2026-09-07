@@ -59,6 +59,38 @@ of the loss target, and a lagged target critic addresses a different problem
 (nonstationarity). Result doc:
 research/RESULTS-IDENTIFIABILITY-2026-08-29.md.
 
+### 2.1 Formal statements (2026-09-07)
+
+The identity in Section 2 is upgraded to a theorem set with proofs and a
+deterministic numeric verification (all checks PASS):
+`research/proofs/identifiability-frontier.md`,
+`theory/identifiability_frontier.py`,
+`research/RESULTS-THEORY-FRONTIER-2026-09-07.md`. Load-bearing statements:
+
+- **T1 (sign unidentifiability).** The M = 1 zero-loss set contains students
+  realising every `u` in `[-S* N/((N-1)(1-rho)), S*)`: the decision statistic
+  is never sign-identified. On the measured map the collapse student
+  (`g_s ~ 0`) has `u_s > 0` while the teacher's `u* ~ -80`.
+- **T2 (coupling erosion).** `dS/dg = (1-rho)(N-1)/N`; on the measured
+  aleatoric-dominated map `S*/|u*| = 2.4e-4`, so the M = 1 term is blind to
+  the channel that determines `u` exactly where `u ~ -g`.
+- **P3 + T5 (why fixes fail/succeed).** The separated aleatoric gradient is
+  `O(g_s)` at the `g = 0` boundary (sticky, noise-pinned at ~0.76 g* per
+  state, M = 2); no multiplicative dial escapes it; inverse-variance EMA
+  down-weights the aleatoric term by `(w*/g*)^2 = 7e-9` on the measured map.
+- **T4 (sufficiency + M rule).** M >= 2 with the coupling-aware debias has a
+  unique population minimiser; teacher-noise floor sets
+  `M >~ (A_w + A_g)/(B (Delta_w^2 + Delta_g^2))`.
+- **T6 (gating protocol).** Percentile thresholds are invariant to strictly
+  increasing score transforms; absolute thresholds are not. Payoff contrasts
+  must use percentile gating, held fixed across arms.
+
+Protocol audit (2026-09-07, `RESULTS-THEORY-FRONTIER-2026-09-07.md`):
+`u_gate.mode: both` (stop + weight, percentile 0.85) has been active from
+step 900 in every policy/payoff run on this config since creation; arm
+comparisons are unaffected but prose must not describe these runs as
+ungated, and the null payoff reading applies to self-gated training.
+
 ## 3. Fixed value map: the loss reallocates, it does not preserve
 
 Small-lab stress (5 members, 8 paired latents, 1,024-state grid, fixed benign

@@ -22,6 +22,10 @@ New here? Start with [`SUMMARY.md`](SUMMARY.md) - the same story in plain
 language. The rest of this README assumes you already know it.
 
 Theory: [`theory/distill_identifiability.py`](theory/distill_identifiability.py).  
+Formal frontier (what the loss can/cannot identify, verified theorems):
+[`theory/identifiability_frontier.py`](theory/identifiability_frontier.py),
+[`research/proofs/identifiability-frontier.md`](research/proofs/identifiability-frontier.md),
+[`research/RESULTS-THEORY-FRONTIER-2026-09-07.md`](research/RESULTS-THEORY-FRONTIER-2026-09-07.md).  
 Write-up: [`research/RESULTS-IDENTIFIABILITY-2026-08-29.md`](research/RESULTS-IDENTIFIABILITY-2026-08-29.md).  
 Index: [`research/RESULTS.md`](research/RESULTS.md).
 Mechanism of the identified-arm policy collapse: [`research/U-COLLAPSE-MECHANISM-2026-09-05.md`](research/U-COLLAPSE-MECHANISM-2026-09-05.md).
@@ -193,6 +197,7 @@ python -m udwm.scripts.smoke_test
 python -m pytest tests/test_core.py tests/test_ground_truth_w_g.py -q
 python theory/toy_ube_mdp.py
 python theory/distill_identifiability.py
+python theory/identifiability_frontier.py
 python theory/estimator_variance.py
 python theory/ground_truth_w_g.py
 ```
@@ -210,6 +215,7 @@ python theory/ground_truth_w_g.py
 | Controlled stress runner | `udwm/scripts/run_decision_distillation_stress.py` |
 | Policy 2×2 runner | `udwm/scripts/run_delayed_bimodal_policy_ablation.py` |
 | Identifiability toy (zero-loss family) | `theory/distill_identifiability.py` |
+| Identifiability frontier (theorems + verification) | `theory/identifiability_frontier.py` |
 | MC-UBE bias / variance | `theory/estimator_bias.py`, `theory/estimator_variance.py` |
 
 One-page statement: [`papers/RESEARCH_OVERVIEW.md`](papers/RESEARCH_OVERVIEW.md).

@@ -61,3 +61,25 @@ same-seed 3,600-step sanity rows where useful.
 - Branch eq-only: if `identified_eq` climbs to >= 0.70 while baselines do
   not, report budget-dependent transfer of the identified arm (informative,
   not adjudicative at N=2).
+
+## Amendment (2026-09-07, after DMC payoff Addendum 3): probe arms extended
+
+The probe now runs the full amended DMC arm list - `ordinary`,
+`lagged_hybrid`, `identified_eq` plus `hybrid`, `identified_hybrid` (EMA
+collapse control) and `lagged_identified_eq` (the combined-fix headline arm
+added by DMC payoff Addendum 3) - so the budget-adequate comparison needs no
+second probe and the combined arm's DMC behaviour is visible at the same
+budget as the DelayedBimodal-comparable baselines. `gate-off` ordinary control
+is deferred to the payoff study proper (it is a payoff contrast, not a
+budget question). Seeds {0, 1}, 15,000 steps, runner unchanged:
+
+```bash
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --config configs/dmc_hopper_probe.yaml \
+  --seeds 0 1 \
+  --variants ordinary hybrid lagged_hybrid identified_hybrid identified_eq lagged_identified_eq \
+  --steps 15000 --jobs 2 --threads 2 --gpu-ids 0,1 \
+  --out runs/dmc_budget_probe_gpu.json
+```
+
+Still diagnostic (N=2), never adjudicative; decision rule unchanged.
