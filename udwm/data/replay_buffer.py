@@ -6,6 +6,18 @@ import numpy as np
 import torch
 
 
+def _scalar(x, name):
+    """float() that also accepts size-1 arrays (numpy >= 2 removed the
+    size-1 deprecation path; gated-imagination rewards/dones carry a
+    trailing singleton dim, so float(rewards[i]) must squeeze, not error)."""
+    arr = np.asarray(x)
+    if arr.ndim == 0:
+        return float(arr)
+    if arr.size == 1:
+        return float(arr.reshape(-1)[0])
+    raise TypeError(f"{name} must be a scalar or size-1 array; got shape {arr.shape}")
+
+
 class ReplayBuffer:
     """Circular replay for (s, a, r, s', done) with optional prioritization weights."""
 
@@ -60,7 +72,14 @@ class ReplayBuffer:
         n = obs.shape[0]
         for i in range(n):
             w = float(weights[i]) if weights is not None else 1.0
-            self.add(obs[i], actions[i], float(rewards[i]), next_obs[i], float(dones[i]), w)
+            self.add(
+                obs[i],
+                actions[i],
+                _scalar(rewards[i], "reward"),
+                next_obs[i],
+                _scalar(dones[i], "done"),
+                w,
+            )
 
     def sample(self, batch_size: int, prioritized: bool = False) -> Dict[str, torch.Tensor]:
         if self.size == 0:
