@@ -145,6 +145,34 @@ VARIANTS = {
         "distill_guard_enabled": True,
         "distill_value_warmup_updates": 50,
     },
+    # G7 normalization-control cells (registered 2026-09-07,
+    # research/NORMALIZATION-CONTROL-PREREGISTRATION-2026-09-07.md): each
+    # copies the existing arm exactly and toggles ONLY distill_normalize_values,
+    # so the lagged-vs-live w-RMSE contrast can be read within a fixed
+    # normalization cell (D-A unnormalized, C-B normalized).
+    "identified_eq_norm": {
+        "distill_decision_weight": 1.0,
+        "distill_value_variance_weight": 1.0,
+        "distill_identified": True,
+        "distill_m_latents": 2,
+        "distill_aleatoric_weight": 1.0,
+        "distill_reweight_ema": False,
+        "distill_use_target_critic": False,
+        "distill_normalize_values": True,
+        "distill_guard_enabled": False,
+    },
+    "lagged_identified_eq_nonorm": {
+        "distill_decision_weight": 1.0,
+        "distill_value_variance_weight": 1.0,
+        "distill_identified": True,
+        "distill_m_latents": 2,
+        "distill_aleatoric_weight": 1.0,
+        "distill_reweight_ema": False,
+        "distill_use_target_critic": True,
+        "distill_normalize_values": False,
+        "distill_guard_enabled": True,
+        "distill_value_warmup_updates": 50,
+    },
     # Payoff gate-off control (registered: research/DMC-PAYOFF-PREREGISTRATION
     # Addendum 4, 2026-09-07). Ordinary distillation (every decision weight
     # zero) with the U-gate disabled, so the payoff contrast can separate
