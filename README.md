@@ -18,6 +18,9 @@ model, **not** conformal coverage, and **not** a SOTA control claim.
 
 **Repo:** https://github.com/nisaral/uncertainty-diffusion-world-models
 
+New here? Start with [`SUMMARY.md`](SUMMARY.md) - the same story in plain
+language. The rest of this README assumes you already know it.
+
 Theory: [`theory/distill_identifiability.py`](theory/distill_identifiability.py).  
 Write-up: [`research/RESULTS-IDENTIFIABILITY-2026-08-29.md`](research/RESULTS-IDENTIFIABILITY-2026-08-29.md).  
 Index: [`research/RESULTS.md`](research/RESULTS.md).
@@ -25,6 +28,15 @@ Mechanism of the identified-arm policy collapse: [`research/U-COLLAPSE-MECHANISM
 Leverage-fix negative (naive fix does not help): [`research/RESULTS-LEVERAGE-FIX-2026-09-05.md`](research/RESULTS-LEVERAGE-FIX-2026-09-05.md).
 Paper-shaped assembly: [`research/PAPER-NARRATIVE.md`](research/PAPER-NARRATIVE.md).
 Reproduction: [`REPRODUCE.md`](REPRODUCE.md).  GPU: [`RUN_ON_GPU.md`](RUN_ON_GPU.md).
+
+Latest (2026-09-07): corrected-weight N-study
+([`research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md`](research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md)),
+combined-fix result
+([`research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md`](research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md)),
+DMC sanity + budget probe
+([`research/RESULTS-DMC-SANITY-2026-09-07.md`](research/RESULTS-DMC-SANITY-2026-09-07.md)),
+and the zero-compute H2/H4 re-analysis
+([`research/RESULTS-H2H4-REANALYSIS-2026-09-07.md`](research/RESULTS-H2H4-REANALYSIS-2026-09-07.md)).
 
 ---
 
@@ -142,6 +154,15 @@ rank-based downstream gating.
    directionally helps within identified (20/30, CI excludes 0, below the
    70% bar). Identified distillation is NOT confirmed in policy.
 
+2026-09-05/07 correction: the `identified_*` rows above ran with the EMA
+reweighting on (attribution bug, fixed and re-adjudicated in
+[`research/U-COLLAPSE-MECHANISM-2026-09-05.md`](research/U-COLLAPSE-MECHANISM-2026-09-05.md)).
+The equal-weight identified arm meets its transfer bars below parity
+([`research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md`](research/RESULTS-CORRECTED-WEIGHT-POLICY-2026-09-05.md)),
+and the combined lagged + equal-weight arm reaches parity at the top of the
+table on DelayedBimodal
+([`research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md`](research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md)).
+
 Reproduce the adjudicated table (split by seed, then merged):
 ```bash
 python -m udwm.scripts.run_policy_2x2_split_seeds \
@@ -209,7 +230,12 @@ already exist (MACURA and earlier). This repo does not claim to invent them.
 - Luis UBE Assumptions 1–2 fail here as in Luis’s deep-RL instantiation.
 - \(\sqrt{U}\) is a **score**, not a conformal interval.
 - Top-decile retrieval of high-uncertainty states is **not** established.
-- Policy 2×2 for identified vs hybrid: adjudicated at N=30 — lagging (not identifiability) is the measured fix; the identified loss does not transfer in policy on this benchmark.
+- Policy 2×2 for identified vs hybrid, N=30: lagging is the measured fix for
+  the EMA-reweighted identified arm; that arm's negative is attributed to the
+  EMA normaliser (2026-09-05). The equal-weight identified arm transfers at
+  policy scale below parity (2026-09-05), and the combined lagged +
+  equal-weight arm reaches parity at the top of the table on DelayedBimodal
+  (2026-09-07, N=10; DMC adjudication pending a registered budget probe).
 
 ---
 

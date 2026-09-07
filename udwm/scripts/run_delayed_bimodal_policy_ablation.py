@@ -129,6 +129,22 @@ VARIANTS = {
         "distill_guard_enabled": True,
         "distill_value_warmup_updates": 50,
     },
+    # Combined fix (registered 2026-09-07, COMBINED-FIX-PREREGISTRATION):
+    # lagged critic + equal-weight identified (no EMA). The {lag} x {equal-
+    # weight} cell of the 2x2 was never run: lagged_identified combined lag
+    # with the EMA reweighting whose aleatoric starvation was diagnosed later.
+    "lagged_identified_eq": {
+        "distill_decision_weight": 1.0,
+        "distill_value_variance_weight": 1.0,
+        "distill_identified": True,
+        "distill_m_latents": 2,
+        "distill_aleatoric_weight": 1.0,
+        "distill_reweight_ema": False,
+        "distill_use_target_critic": True,
+        "distill_normalize_values": True,
+        "distill_guard_enabled": True,
+        "distill_value_warmup_updates": 50,
+    },
 }
 
 
@@ -200,6 +216,10 @@ def main(argv=None):
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--device", default=None,
                         help="override config device (cpu/cuda); default: config value")
+    parser.add_argument("--save-checkpoints", default=None,
+                        help="dir; if given, save trainer.checkpoint per arm as "
+                             "{variant}_seed{seed}.pt (teacher+student+agent+u_net, "
+                             "trainer.save format) for HF diagnostic-artifact export")
     args = parser.parse_args(argv)
     base = load_config(args.config)
     if args.device is not None:
@@ -227,9 +247,15 @@ def main(argv=None):
             trainer.wm_opt = torch.optim.Adam(trainer.world_model.student.parameters(), lr=1e-3)
             result = trainer.train()
             metrics = result["final_metrics"]
+            if args.save_checkpoints is not None:
+                ckpt_dir = Path(args.save_checkpoints)
+                ckpt_dir.mkdir(parents=True, exist_ok=True)
+                ckpt_path = ckpt_dir / f"{variant}_seed{seed}.pt"
+                trainer.save(ckpt_path)
             row = {
                 "seed": seed,
                 "variant": variant,
+                "checkpoint": (str(ckpt_path) if args.save_checkpoints is not None else None),
                 "final_return": result["final_eval_return"],
                 "teacher_frozen": bool(getattr(trainer.world_model, "teacher_frozen", False)),
                 "teacher_updates": int(cfg["model"].get("distill_teacher_pretrain_updates", 0)),

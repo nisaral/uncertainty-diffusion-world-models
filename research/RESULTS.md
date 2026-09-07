@@ -53,3 +53,34 @@ does not transfer" from "the u_rank measurement is degenerate at this
 budget"; the 30-seed adjudication is held pending the registered budget probe
 (15k = 15 episodes, seeds 0-1).
 [RESULTS-DMC-SANITY-2026-09-07.md](RESULTS-DMC-SANITY-2026-09-07.md)
+
+## Addendum 2026-09-07 (second): H1 combined fix + H2/H4 re-analysis
+
+1. **H1: the {lag} x {equal-weight} cell ran (N=10, DelayedBimodal).**
+   Registration `COMBINED-FIX-PREREGISTRATION-2026-09-07.md`; data
+   `runs/policy_combined_fix_10seed.json` (fresh full 7-arm table, exact
+   pairing, gap 0.0; the merge-with-existing design was abandoned after the
+   registered bit-exactness gate failed). `lagged_identified_eq` is the top of the table: u-rank 0.948 (10/10 >= 0.70).
+   Bar 2 met (vs identified_eq +0.071, 8/10, CI excludes 0); bar 3 met. Vs
+   ordinary +0.014 (6/10, CI [-0.013, +0.047]) and vs lagged_hybrid +0.003
+   (5/10, CI [-0.019, +0.022]) are PARITY, not confirmed exceedances - every
+   top arm sits in the ceiling band. The confirmed non-ceiling effects are the
+   w_rmse hole closing (0.92 -> 0.28 vs identified_eq, CI excludes 0) and the
+   u_rmse improvement. eq's confirmed deficit vs ordinary (-0.057 here, -0.104
+   in the 09-05 file) is fully closed by adding lag; partial -> full transfer
+   on DelayedBimodal is supported at N=10. Bar 1 (exceeding lagged_hybrid) is
+   a ceiling test on this benchmark and moves to DMC.
+   [RESULTS-COMBINED-FIX-POLICY-2026-09-07.md](RESULTS-COMBINED-FIX-POLICY-2026-09-07.md)
+2. **H2/H4 zero-compute re-analysis of existing rows.** H4: the logged
+   selective columns do not show tail preservation for any arm - the fitted
+   U-net risk signal is at/below chance everywhere (recall_bad 0.26-0.36 vs
+   ~0.37 random baseline; rank corr negative for all arms) and no eq tail
+   contrast confirms; the EMA collapse is muted on tail recall, so tail
+   metrics alone would understate the pathology. H2: across the two existing
+   eq-vs-hybrid cells the literal instability regression is refuted at N=2
+   cells (DMC hybrid sd 0.111 > DB 0.090 with eq benefit ~0 vs +0.214); the
+   replicating pattern is within-cell (eq's gap grows on seeds where hybrid
+   is weak, both cells) and vanishes under DMC floor-compression - i.e., the
+   conditional-benefit claim is operating-point-bound, consistent with the
+   registered budget confound.
+   [RESULTS-H2H4-REANALYSIS-2026-09-07.md](RESULTS-H2H4-REANALYSIS-2026-09-07.md)

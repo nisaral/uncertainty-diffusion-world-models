@@ -275,3 +275,38 @@ budget". The 30-seed adjudication is held pending the registered budget probe
 (15k = 15 episodes). Outreach framing stays on hold: the current honest claim
 is mechanism-generality plus environment-dependent practical benefit, not the
 pre-DMC partial-transfer paragraph.
+
+---
+
+
+## 2026-09-07 addendum (second): combined fix closes the partial-transfer gap
+
+H1 of the upgrade plan ran (registration
+`research/COMBINED-FIX-PREREGISTRATION-2026-09-07.md`, data
+`runs/policy_combined_fix_10seed.json`, N=10 DelayedBimodal, fresh 7-arm
+table with exact per-seed teacher pairing). `lagged_identified_eq` (lagged
+critic + equal-weight identified, the never-run 2x2 cell) is the top of the
+table on u-rank: 0.948, 10/10 >= 0.70; > `identified_eq` by +0.071 (8/10, CI
+excludes 0; bar 2 met). Vs `ordinary` (+0.014, 6/10, CI [-0.013, +0.047]) and
+vs `lagged_hybrid` (+0.003, 5/10, CI [-0.019, +0.022]) the combined arm is at
+PARITY, not a confirmed exceedance - every top arm is inside the ceiling band
+(lagged_hybrid alone was already at ~0.95), so "combined exceeds
+lagged_hybrid" is not adjudicable on this benchmark. The equal-weight arm's
+confirmed deficit vs ordinary (-0.057 here, -0.104 in the 09-05 file) is
+fully closed once lagging is added: partial transfer becomes full transfer on
+DelayedBimodal once both known failure modes are addressed. The confirmed
+non-ceiling effects are the w_rmse hole closing (0.92 -> 0.28 vs
+identified_eq, CI excludes 0; also confirmed better than ordinary) and the
+u_rmse improvement; both carry the caveat that the lagged arms train with
+normalized value targets (registered knob), so the absolute w_rmse scale of
+lagged vs live arms is not yet a controlled mechanism claim. Where this lands
+the paper narrative: the closer is "corrected-weight confirmation (partial
+transfer) -> combined-fix full-transfer-at-parity result", exactly as
+Section 8 ordered - with the DMC 30-seed adjudication still the
+cross-environment verdict (the only regime with headroom between arms), and
+the combined arm riding along there. H2/H4 re-reads (zero compute) are
+recorded in `research/RESULTS-H2H4-REANALYSIS-2026-09-07.md`; both sharpen
+the DMC story rather than changing it: the logged tail columns show no arm
+preserving tail risk at the DMC budget (floor-compression is not specific to
+u-rank), and the eq-vs-hybrid benefit does not scale with cross-seed
+instability across environments - it is operating-point-bound.

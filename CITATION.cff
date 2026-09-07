@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this repository or its results, please cite it as follows. Author metadata will be completed before the v1.0 release."
+title: "Uncertainty-preserving distillation for diffusion world models"
+# TODO(pre-release): replace the contributor placeholder with the author list
+# before tagging v1.0.
+authors:
+  - name: "Uncertainty Diffusion World Models contributors"
+repository-code: "https://github.com/nisaral/uncertainty-diffusion-world-models"
+abstract: >-
+  Falsifiable laboratory for one claim about distillation losses: matching
+  teacher-student value disagreement at a single shared diffusion latent does
+  not identify epistemic uncertainty (one scalar, two unknowns). Contains the
+  identifiability construction, fixed-map N=50 and live-critic N=30 policy
+  tables, the diagnosed EMA-reweighting attribution bug and its correction,
+  the equal-weight (partial-transfer) result, and the combined lagged +
+  equal-weight fix reaching parity on DelayedBimodal (DMC adjudication
+  pending a registered budget probe). Every adjudicated endpoint is
+  pre-registered; rows use exact per-seed teacher checksum pairing.
+keywords:
+  - model-based reinforcement learning
+  - world models
+  - diffusion models
+  - distillation
+  - uncertainty quantification
+  - epistemic uncertainty
+  - aleatoric uncertainty
+license: MIT
+date-released: "2026-09-07"
+version: "0.9.0"
