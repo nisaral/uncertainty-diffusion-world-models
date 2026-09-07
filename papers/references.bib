@@ -88,3 +88,69 @@
   booktitle={arXiv},
   year={2023}
 }
+
+% ---------------------------------------------------------------------------
+% Payoff / positioning citations (added 2026-09-07). These are the gate-payoff
+% works the related-work section must cite whenever the payoff story is told
+% (MACURA, AAAI'26 knowledge boundary, ELVIS, GIRL) plus the sibling negative
+% result from the MACURA group (Biased Dreams). Metadata verified 2026-09-07
+% against primary/secondary records: icml.cc virtual program (MACURA), ADS +
+% RSS 2026 program (ELVIS), AAAI OJS/DOI + dblp (Liu et al.), arXiv listings
+% (GIRL, Biased Dreams). Venue of GIRL is NOT confirmed - cite as arXiv.
+% ---------------------------------------------------------------------------
+
+@inproceedings{frauenknecht2024macura,
+  title={Trust the Model Where It Trusts Itself: Model-Based Actor-Critic with Uncertainty-Aware Rollout Adaption},
+  author={Frauenknecht, Bernd and Ehlgen, Tobias and Trimpe, Sebastian},
+  booktitle={ICML},
+  year={2024},
+  note={arXiv:2405.19014. ICML 2024 (virtual poster 34216); the RLDM-2024
+        tag in earlier memos was wrong and is corrected here.}
+}
+
+@inproceedings{liu2026knowledgeboundary,
+  title={Perceiving the Knowledge Boundary: Uncertainty-Guided Exploration and Imagination for World Models},
+  author={Liu, Zhenxian and Peng, Peixi and Huang, Yangru and Tian, Yonghong},
+  booktitle={AAAI},
+  volume={40},
+  number={28},
+  pages={23990--23998},
+  year={2026},
+  note={DOI 10.1609/aaai.v40i28.39576. Dynamic uncertainty filter on
+        imagined rollouts over an ensemble of lightweight predictors.}
+}
+
+@inproceedings{du2026elvis,
+  title={ELVIS: Ensemble-Calibrated Latent Imagination for Long-Horizon Visual MPC},
+  author={Du, Yurui and Song, Pinhao and Hu, Yutong and Detry, Renaud},
+  booktitle={RSS},
+  year={2026},
+  note={arXiv:2605.04709 (ADS record 2026arXiv260504709D; RSS 2026 program).
+        Ensemble UCB + uncertainty-aware lambda-return gating in visual MPC;
+        conceptually adjacent to this repo's UBE net - say what differs:
+        propagation object, distilled 1-NFE student, loss-preservation claim.}
+}
+
+@article{hiremath2026girl,
+  title={GIRL: Generative Imagination Reinforcement Learning via Information-Theoretic Hallucination Control},
+  author={Hiremath, Prakul Sunil},
+  journal={arXiv:2604.07426},
+  year={2026},
+  note={Hallucination/drift control in latent world models (RSSM/DreamerV3
+        style). Venue unconfirmed as of 2026-09-07; cite as arXiv preprint.}
+}
+
+@article{berger2026biaseddreams,
+  title={Biased Dreams: Limitations to Epistemic Uncertainty Quantification in Latent Space Models},
+  author={Berger, Julia and Frauenknecht, Bernd and Trimpe, Sebastian and Leibe, Bastian},
+  journal={arXiv:2604.25416},
+  year={2026},
+  note={Sibling negative result from the MACURA group: ensemble geometric
+        Jensen-Shannon disagreement over RSSM latent rollouts shrinks toward
+        in-distribution levels while true divergence from the simulator grows,
+        and closed-loop prior rollouts overestimate reward. They state the
+        limitation cannot be resolved through improved uncertainty estimation
+        alone. Ours differs: distilled diffusion world model (not latent
+        dynamics), MC-UBE after a value map; headline is the
+        distillation-identifiability mechanism, with payoff as support.}
+}

@@ -118,3 +118,30 @@ budget probe) has actual room between arms.
 - This record; addenda in `RESULTS.md` and `PAPER-NARRATIVE.md`.
 - DMC: the combined arm should ride along in the registered DMC adjudication
   (30-seed, held pending the budget probe) - this run is DelayedBimodal-only.
+
+## Addendum (2026-09-07): parity contrasts re-verified with one method;
+combined-vs-ordinary CI recorded explicitly
+
+The review pass on this table asked for wins/N and a CI for the
+combined-vs-ordinary u-rank contrast (the one headline-sounding number that
+was not yet sitting in the adjudication block with the other contrasts). It
+was quoted in the table above and in `PAPER-NARRATIVE.md`, but the bootstrap
+was not yet recorded as reproducible. Re-run with the same convention as the
+adjudication summarizer - paired per-seed deltas over the 10 shared seeds,
+20,000-draw percentile bootstrap, fixed RNG seed, wins = seeds where the
+delta is positive:
+
+| contrast | endpoint | mean delta | wins/N | bootstrap 95% | P(delta > 0) |
+|---|---|---|---:|---:|---:|
+| lagged_identified_eq - ordinary | u_rank | +0.0142 | 6/10 | [-0.0132, +0.0464] | 0.821 |
+| lagged_identified_eq - lagged_hybrid | u_rank | +0.0026 | 5/10 | [-0.0192, +0.0224] | 0.612 |
+| lagged_identified_eq - identified_eq | u_rank | +0.0707 | 8/10 | [+0.0354, +0.1032] | 1.0000 |
+| identified_eq - ordinary | u_rank | -0.0565 | 1/10 | [-0.0862, -0.0215] | 0.0014 |
+
+Reading (unchanged from the adjudication above, now with every contrast under
+the identical method): the combined arm is at **parity** with ordinary and
+lagged_hybrid (CIs straddle 0, wins at chance), not a confirmed exceedance -
+correct phrasing everywhere is "met parity and then some on a ceiling-bound
+benchmark", never "beats". The confirmed, non-ceiling effects remain Bar 2
+(vs identified_eq, +0.071, 8/10) and the w-hole closing. Method:
+`numpy.random.default_rng(0)`, 20,000 draws.

@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
 # Staged DMC/GPU runner for the registered DMC gate + payoff study
-# (research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md, incl. Amendment 1).
+# (research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md, incl. Amendments 1,
+# Addenda 3-4 of 2026-09-07).
 #
 # Stages (run in order; stage2 refuses to start until the gate is recorded):
 #   stage0 : env + CUDA smoke on the GPU host (dm_control via shimmy)
 #   stage1 : diagnostic gate - ordinary-arm pilot on GATE_SEEDS, then
 #            udwm.scripts.dmc_gate_ratio prints teacher g*/w* + regime
-#   stage2 : main comparison (SEEDS x VARIANTS) seed-parallel over GPU_IDS
+#   stage2 : main comparison (SEEDS x VARIANTS, six gated uncertainty arms
+#            per DMC-PAYOFF-PREREGISTRATION Addendum 3) seed-parallel
+#   stage2b: gate-off control (SEEDS x CTRL_VARIANTS, ordinary_gate_off;
+#            registered payoff control, DMC prereg Addendum 4)
 #   stage3 : adjudication summary on the merged JSON
+#
+# BEFORE stage2/2b (2026-09-07 protocol): run the registered budget probe
+# (research/DMC-BUDGET-PROBE-PREREGISTRATION-2026-09-07.md, 15,000 steps,
+# seeds 0-1, configs/dmc_hopper_probe.yaml) and apply Amendment 2 if the
+# probe confirms the 3,600-step budget confound: set STEPS (and CONFIG to a
+# payoff config with eval_freq >= 3000) to the amended budget before the
+# 30-seed adjudication; never mix rows across budgets in one table.
 #
 # Env knobs (defaults match the registered study + committed config):
 #   TASK       shimmy DMC id, default dm_control/hopper-hop-v0
@@ -18,7 +29,9 @@
 #   GPU_IDS    comma list of CUDA devices, default "0,1" (2x T4 session);
 #              single-GPU sessions MUST set GPU_IDS=0
 #   OUT        merged output path, default runs/dmc_payoff_30seed_gpu.json
-#   VARIANTS   main-study arms (registered set), default all five
+#   VARIANTS   main-study arms (registered six-arm set, Addendum 3)
+#   CTRL_VARIANTS  gate-off control arms (Addendum 4), default ordinary_gate_off
+#   OUT_CTRL   gate-off control merged output path
 #   PILOT      gate pilot output path, default runs/dmc_gate_pilot.json
 #
 # Resume semantics: per-seed partial files are written atomically per arm;
@@ -33,7 +46,9 @@ GATE_SEEDS="${GATE_SEEDS:-0 1}"
 SEEDS="${SEEDS:-0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29}"
 GPU_IDS="${GPU_IDS:-0,1}"
 OUT="${OUT:-runs/dmc_payoff_30seed_gpu.json}"
-VARIANTS="${VARIANTS:-ordinary hybrid lagged_hybrid identified_hybrid identified_eq}"
+VARIANTS="${VARIANTS:-ordinary hybrid lagged_hybrid identified_hybrid identified_eq lagged_identified_eq}"
+CTRL_VARIANTS="${CTRL_VARIANTS:-ordinary_gate_off}"
+OUT_CTRL="${OUT_CTRL:-runs/dmc_payoff_30seed_gpu_ctrl.json}"
 PILOT="${PILOT:-runs/dmc_gate_pilot.json}"
 
 n_gpus() {
@@ -87,6 +102,21 @@ stage2() {
   echo "[dmc:stage2] done: ${OUT}"
 }
 
+stage2b() {
+  if [ ! -f "$PILOT" ]; then
+    echo "[dmc:stage2b] refusing: gate pilot not found ($PILOT). Run stage1 first." >&2
+    exit 1
+  fi
+  njobs=$(n_gpus)
+  echo "[dmc:stage2b] gate-off control: ${njobs} worker(s) on ${GPU_IDS}, seeds: ${SEEDS}"
+  echo "  variants: ${CTRL_VARIANTS} | steps: ${STEPS} | out: ${OUT_CTRL}"
+  python -m udwm.scripts.run_policy_2x2_split_seeds \
+    --config "$CONFIG" --seeds $SEEDS --variants $CTRL_VARIANTS \
+    --steps "$STEPS" --jobs "$njobs" --threads 2 --gpu-ids "$GPU_IDS" \
+    --out "$OUT_CTRL"
+  echo "[dmc:stage2b] done: ${OUT_CTRL}"
+}
+
 stage3() {
   echo "[dmc:stage3] adjudication summary (CPU aggregation of the GPU rows):"
   python -m udwm.scripts.summarize_corrected_policy --data "$OUT"
@@ -96,7 +126,8 @@ case "${1:-all}" in
   stage0) stage0 ;;
   stage1) stage1 ;;
   stage2) stage2 ;;
+  stage2b) stage2b ;;
   stage3) stage3 ;;
-  all) stage0; stage1; stage2; stage3 ;;
-  *) echo "usage: $0 [stage0|stage1|stage2|stage3|all]"; exit 1 ;;
+  all) stage0; stage1; stage2; stage2b; stage3 ;;
+  *) echo "usage: $0 [stage0|stage1|stage2|stage2b|stage3|all]"; exit 1 ;;
 esac

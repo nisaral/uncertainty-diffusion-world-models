@@ -112,12 +112,63 @@ needs a small CPU run, or needs the Kaggle DMC staging.
   memo's protocol-alignment section already commits to.
 - Cost: evaluator change + re-read of existing rollout logs; no new training.
 
+## G7 - normalization-controlled w-channel contrast (closes the Theorem 7 caveat)
+
+- Claim: Theorem 7's caveat (results doc + proofs doc open item 1(ii)) says
+  the absolute w-RMSE scale of lagged vs live arms is confounded because the
+  lagged arms train with the registered `normalize_values` knob and the live
+  arms do not - so "the combined arm closes the w hole (0.92 -> 0.28)" is
+  not yet a controlled mechanism claim. The discriminator is one cheap
+  contrast: run `identified_eq` and `lagged_identified_eq` with the value
+  targets BOTH normalized (and both unnormalized) on DelayedBimodal, N=10,
+  exact teacher pairing, and check whether the w-RMSE gap survives within
+  each normalization cell. If it survives: the w improvement is a lagging
+  effect, not a normalization artifact, and the paper can quote w-scale. If
+  it vanishes: the w claim is dropped to rank endpoints only, and open item
+  1's second candidate mechanism is closed.
+- Why novel: it converts a stated caveat into a measured attribution; no
+  repo run has ever held normalization fixed across the lag axis.
+- Cost: small CPU run (one 2x2 arm cell set, N=10), rides the combined-fix
+  registration pattern; pre-registration required before running.
+- Theory hook: separates the two candidate mechanisms in proofs open item 1
+  (distribution shift vs normalize_values) - the last loose end before the
+  Theorem 7 arm-to-term mapping is a clean empirical statement.
+
+## G8 - EMA-at-parity annihilation: capacity-competition model (theory target)
+
+- Claim: proofs open item 2 - why EMA-both annihilates g even at w* = g*
+  (weights equal) - is attributed empirically to the epistemic UP-weight and
+  its interaction with Adam, but has no formal statement. A minimal model:
+  the student's shared trunk has bounded capacity; the EMA loss multiplies
+  the w-gradient by ~(w*/g*)^-2 relative to g, and under a shared-parameter
+  competition the channel with the larger effective gradient captures the
+  capacity that determines the g-channel's output scale. The falsifiable
+  prediction: a capacity knob (student hidden width) at fixed EMA weights
+  should show g-collapse depth increasing as capacity shrinks, and a
+  g-scale-parameterization that decouples the channel outputs should remove
+  the collapse even under EMA weighting.
+- Why novel: nobody models the distilled-uncertainty collapse as capacity
+  competition between the epistemic and aleatoric output channels; the
+  repo's P3/T5 analysis stops at the per-channel gradient, not the shared
+  trunk.
+- Cost: toy (theory/ground_truth_w_g.py structure) + one width sweep on the
+  existing probe runner; no GPU.
+- Theory hook: turns open item 2 from empirical attribution into a
+  theorem candidate ("under EMA weighting and shared trunk capacity c, the
+  aleatoric output scale collapses below (w*/g*)^2 c^-1 ..." - to be
+  derived, not yet claimed).
+
 ## Which to run first (cheap-first ordering)
 
-1. G5 and G6: zero-GPU re-reads of existing rows; H4 already cleared the
-   bottom-tail question, so these close the evaluation design before the DMC
-   payoff runs.
-2. G0 and G1: small CPU runs on DelayedBimodal; each needs a dated
-   pre-registration. G0 has a direct Theorem 7 hook.
-3. G2, G3, G4: design-level until the DMC verdict lands; G4's gate-mode axis
+1. G7 first: it is the cheapest run that removes a stated caveat from the
+   paper's closest-to-headline table (Theorem 7 arm-to-term mapping) and it
+   gates whether w-scale language is admissible in the draft at all.
+2. G5 and G6: zero-GPU re-reads/design - note the logged rows do NOT contain
+   per-state restricted rankings (see RESULTS-H2H4-REANALYSIS), so G5's
+   literal top-tau test needs the evaluator to log per-state teacher/student
+   scores, which the DMC payoff runs should do from the start.
+3. G0 and G1: small CPU runs on DelayedBimodal; each needs a dated
+   pre-registration. G0 has a direct Theorem 7 hook; G8's toy leg shares the
+   G0/G1 machinery.
+4. G2, G3, G4: design-level until the DMC verdict lands; G4's gate-mode axis
    should be fixed in the DMC payoff registration before it runs, not after.

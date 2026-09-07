@@ -167,3 +167,62 @@ budget probe (`research/DMC-BUDGET-PROBE-PREREGISTRATION-2026-09-07.md`,
 15k = 15 episodes, seeds 0-1) decides whether the 30-seed adjudication runs at
 3,600 steps as written or is amended (Amendment 2). No endpoint/arm/seed
 change is made by this addendum; do not quote sanity rows as adjudicated.
+
+## Addendum 4 (2026-09-07): the gate-off control arm is registered
+
+Addendum 3 item 2 committed a separate `gate-off` control arm "so the payoff
+contrast can separate 'the uncertainty object helps gating' from 'gating
+itself hurts'". This addendum registers the arm, its config, and its
+adjudication role before any payoff row runs. No endpoint, seed, or bar of
+the six-arm comparison (Addendum 3) changes.
+
+1. **Arm and override.** `ordinary_gate_off`: ordinary distillation (every
+   decision weight 0) with `u_gate.mode: off`, applied as a root-level
+   override (`VARIANTS["ordinary_gate_off"]._root`, added to
+   `udwm/scripts/run_delayed_bimodal_policy_ablation.py` on 2026-09-07;
+   verified: only `u_gate.mode` differs from `ordinary`, all other knobs
+   identical). Same runner, same per-seed teacher checksum pairing, same
+   eval endpoints, same seeds as the main comparison; rows written to a
+   separate file (`runs/dmc_payoff_30seed_gpu_ctrl.json`) and never merged
+   into the six-arm table.
+2. **Role.** The six uncertainty arms answer "does preserved u-rank cash
+   into return under self-gated imagination" (all gate identically:
+   percentile 0.85 stop+weight from step 900). `ordinary_gate_off` answers
+   the control question "does the gate itself move return for the *same*
+   model arm" by toggling only the gate. It is a payoff contrast, not a
+   mechanism arm: the identifiability mechanism is already adjudicated and
+   is not re-opened here.
+3. **Endpoints.** Primary: paired `final_return` delta
+   (`ordinary_gate_off` - `ordinary`), bootstrap 95% CI + wins/N, same
+   convention as every payoff contrast in this repo. Descriptive only
+   (never adjudicative): `u_rank_corr` and `next_state_mse` on the gate-off
+   arm - the gate changes which imagined rollouts enter the model/policy
+   buffers, so the distillation environment (and therefore eval-side
+   fidelity) is not identical-by-construction across the toggle.
+4. **Pre-committed reading rule.** (i) CI excludes 0: gating has a
+   measurable return effect at this budget, and the payoff headline is read
+   conditionally (preserved u either offsets a gating penalty or compounds
+   a gating gain - say which, with the same CI discipline). (ii) CI
+   includes 0: gating is return-neutral at this budget and the registered
+   u-rank-preservation story is the whole measurable payoff; report as
+   such. (iii) The rule is applied to the registered payoff budget only -
+   never to probe/sanity rows.
+5. **Staging.** `dmc_payoff.sh` stage2b runs the control
+   (`CTRL_VARIANTS=ordinary_gate_off`, `OUT_CTRL`); the Amendment-2 draft
+   config `configs/dmc_hopper_payoff_30k.yaml` is pre-committed but is NOT
+   runnable until the budget probe's decision rule records Amendment 2.
+
+## Amendment 2 draft (2026-09-07): adequate-budget knobs, activation pending
+
+Per the budget-probe registration's pre-committed rule, if the probe
+(15k = 15 episodes, seeds 0-1) supports the budget confound, the 30-seed
+adjudication budget is amended from 3,600 to >= 15,000 env steps and the
+gate re-measured at the amended operating point before any 30-seed row runs.
+Knobs are pre-committed now (nothing below changes until the probe verdict):
+`configs/dmc_hopper_payoff_30k.yaml` - `total_env_steps: 30000` (30
+episodes of the 1,000-step task, twice the DelayedBimodal-comparable 15),
+`eval_freq: 3000` (10 in-training evals + final, bounded wall time), payoff
+log/checkpoint dirs distinct from probe and sanity paths. A 15k payoff (if
+chosen over 30k) uses `configs/dmc_hopper_probe.yaml` with the payoff arm
+list. The registered decision rule and all six arms + the gate-off control
+carry over unchanged.

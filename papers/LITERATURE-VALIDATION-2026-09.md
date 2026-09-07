@@ -96,3 +96,36 @@ not the object of study).
   program, HF papers). ELVIS is the only ID confirmed twice this pass
   (arXiv:2605.04709 + RSS 2026 program entry); 2607.14817 and 2604.07426 are
   confirmed against venue/secondary mirrors only.
+
+## Corrections + metadata re-verification (second pass, 2026-09-07)
+
+Re-checked the four payoff citations and the sibling negative against
+primary/secondary records before writing `papers/references.bib` entries:
+
+1. **MACURA venue: ICML 2024, not RLDM.** icml.cc virtual poster 34216
+   ("Trust the Model Where It Trusts Itself...", 2024-05-03, ICML 2024).
+   `papers/references.bib` carries the ICML `@inproceedings` form;
+   `references_2026_sweep.bib` notes the correction. Authors confirmed:
+   Frauenknecht, Ehlgen, Trimpe.
+2. **Biased Dreams exact title: "...in Latent Space Models".** The arXiv
+   listing (2604.25416) says "Latent Space Models", not "Latent Dynamics
+   Models" as the sweep bib had it. Title fixed in both bib files. Authors:
+   Julia Berger, Bernd Frauenknecht, Sebastian Trimpe, Bastian Leibe.
+3. **GIRL venue unconfirmed.** arXiv:2604.07426 (2026-04-08), single author
+   (Prakul Sunil Hiremath per Semantic Scholar / arXiv mirrors). No venue
+   confirmed as of 2026-09-07 - cite as arXiv preprint; the C3 row above
+   does not claim a venue, and neither should the paper.
+4. **AAAI-Liu metadata confirmed.** "Perceiving the Knowledge Boundary:
+   Uncertainty-Guided Exploration and Imagination for World Models",
+   Zhenxian Liu, Peixi Peng, Yangru Huang, Yonghong Tian, AAAI 40(28):
+   23990-23998, DOI 10.1609/aaai.v40i28.39576 (AAAI OJS + dblp).
+5. **ELVIS metadata confirmed.** "ELVIS: Ensemble-Calibrated Latent
+   Imagination for Long-Horizon Visual MPC", Yurui Du, Pinhao Song, Yutong
+   Hu, Renaud Detry, RSS 2026, arXiv:2605.04709 (ADS record
+   2026arXiv260504709D + RSS program + dblp).
+
+Nothing in the collision table changes: these are metadata corrections, not
+claim reassessments. The positioning constraint stands - headline is the
+distillation-identifiability mechanism; MACURA/AAAI-Liu/ELVIS/GIRL are cited
+whenever the payoff story is told, and Biased Dreams is the sibling negative
+that motivates why the mechanism-level claim is the durable one.

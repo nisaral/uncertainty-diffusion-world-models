@@ -368,18 +368,26 @@ export PYTHONPATH=$PWD
 export GPU_IDS=0,1        # single-GPU session: GPU_IDS=0
 bash dmc_payoff.sh stage0
 bash dmc_payoff.sh stage1
-bash dmc_payoff.sh stage2 # defaults: 30 seeds -> runs/dmc_payoff_30seed_gpu.json
-bash dmc_payoff.sh stage3
+bash dmc_payoff.sh stage2   # 30 seeds x 6 arms -> runs/dmc_payoff_30seed_gpu.json
+bash dmc_payoff.sh stage2b  # gate-off control -> runs/dmc_payoff_30seed_gpu_ctrl.json
+bash dmc_payoff.sh stage3   # adjudication summary
 ```
 
 Notes:
 - dm_control tasks expose Dict observations (`position`/`velocity`/`touch`,
   etc.); `udwm.envs.registry.make_env` flattens them to 1-D Box with
   gymnasium's `FlattenObservation`, so any registered locomotion task works.
-- Registered arms run unchanged: `ordinary hybrid lagged_hybrid
-  identified_hybrid identified_eq` (Amendment 1: EMA-collapse control +
-  equal-weight partial-transfer candidate), 3,600 env steps per seed. Do NOT
-  change arms/endpoints/seeds without a new registration.
+- REGISTERED PREREQUISITE (2026-09-07 protocol): before stage2/2b, run the
+  budget probe (`research/DMC-BUDGET-PROBE-PREREGISTRATION-2026-09-07.md`:
+  15,000 steps, seeds 0 1, `configs/dmc_hopper_probe.yaml`, 6 arms) and apply
+  its pre-committed decision rule. If it confirms the 3,600-step budget
+  confound, record Amendment 2 and run stage2/2b at the amended budget with
+  `configs/dmc_hopper_payoff_30k.yaml` + `STEPS=30000`; never mix rows across
+  budgets in one table.
+- Registered arms (Addendum 3): `ordinary hybrid lagged_hybrid
+  identified_hybrid identified_eq lagged_identified_eq`; the gate-off control
+  `ordinary_gate_off` (Addendum 4) runs via stage2b. Do NOT change
+  arms/endpoints/seeds without a new registration.
 - Resume: per-seed partial files are written atomically per arm
   (`runs/*_seedN.partial.json`); re-running stage1/stage2 resumes finished
   seeds after a session drop.

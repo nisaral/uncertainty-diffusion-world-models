@@ -342,3 +342,78 @@ the DMC story rather than changing it: the logged tail columns show no arm
 preserving tail risk at the DMC budget (floor-compression is not specific to
 u-rank), and the eq-vs-hybrid benefit does not scale with cross-seed
 instability across environments - it is operating-point-bound.
+
+---
+
+## 2026-09-07 addendum (third): venue positioning - what "Q1" requires, and
+the citation block the payoff story must carry
+
+**What the paper is, for a venue.** The headline is a mechanism claim with a
+proof: the single-statistic decision-aware distillation objective cannot
+identify the epistemic decision object (Theorem 1), the correction that
+separates w from g annihilates the aleatoric channel on aleatoric-dominated
+maps (Proposition 3 + Theorem 5), and the two fixes that survive - equal
+weight at M >= 2 and a lagged value map - act on disjoint error terms and
+compose (Theorem 7, verified). The empirical payload is the failure being
+measured, diagnosed, and fixed in a controlled laboratory (DelayedBimodal,
+exact teacher pairing, per-endpoint pre-registration), then checked out of
+sample on DMC. That is a methodology/identifiability paper in the ICML/JMLR
+mechanistic-modeling tradition, NOT a "gated imagination improves RL" paper -
+that usage idea is crowded in 2026 and this repo would be late and
+undifferentiated on it.
+
+**What must land before a main-track submission is realistic (venue norm,
+not preference).**
+1. **DMC verdict under an adequate budget.** One benchmark (DelayedBimodal,
+   ceiling-bound) is below venue norm. The registered path - budget probe
+   (15k, seeds 0-1) -> Amendment 2 -> 30-seed adjudication at the amended
+   budget with the six-arm list + `ordinary_gate_off` control (DMC-PAYOFF-
+   PREREGISTRATION-2026-09-05.md Addenda 3-4) - is load-bearing, not
+   optional. The paper's cross-environment claim is only writable after it.
+2. **A positive-control payoff result.** Today the deliverable is diagnostic
+   (fidelity tables + a proof). For a main track, one gated-imagination
+   payoff contrast with the preserved object (return/risk delta under the
+   registered percentile gate, gate held fixed across uncertainty arms) turns
+   "the loss silently drops the signal" into "the signal, once preserved,
+   changes what imagination does". The `ordinary_gate_off` control
+   (Addendum 4) separates that claim from "gating itself moves return".
+3. **Theory tightening (in progress).** Theorem 7 turns the verified
+   identity into the formal statement of what the objective can and cannot
+   identify under a moving map. The w-channel caveat in Theorem 7 (absolute
+   w-RMSE scale of lagged vs live arms is confounded by the registered
+   `normalize_values` knob) is scheduled for closure by a
+   normalization-controlled contrast (novel-gap G7, 2026-09-07 memo) before
+   any w-scale sentence goes into the draft.
+
+**Citation block for the payoff story (mandatory, all four).** Whenever the
+gated-imagination payoff is told, cite MACURA (Frauenknecht et al., ICML
+2024, arXiv:2405.19014), Liu et al. AAAI 2026 (40(28):23990-23998, dynamic
+uncertainty filter on imagined rollouts), ELVIS (Du et al., RSS 2026,
+arXiv:2605.04709, ensemble UCB + uncertainty-aware lambda-return gating in
+visual MPC), and GIRL (Hiremath, arXiv:2604.07426, hallucination/drift
+control). What differs, in one sentence each: their scores are one-step
+disagreement/drift proxies or critic ensembles - none measures a
+*distillation-loss-induced* failure of a Bellman-propagated MC-UBE object on
+a distilled 1-NFE student, and none has a proof of what its distillation
+objective can identify. Biased Dreams (Berger et al., arXiv:2604.25416) is
+the sibling negative from the MACURA group (epistemic uncertainty on latent
+dynamics shrinks toward in-distribution levels as simulator divergence
+grows) and must appear in the payoff caveat/positioning: it makes the
+crowded-gating framing "uncertainty-gated imagination is both crowded AND
+not yet reliable" and motivates why the mechanism-level claim is the
+durable one. Metadata corrections of 2026-09-07 (MACURA venue = ICML 2024;
+Biased Dreams exact title "...in Latent Space Models"; GIRL venue
+unconfirmed - cite as arXiv) are recorded in
+`papers/LITERATURE-VALIDATION-2026-09.md`.
+
+**Discipline notes carried into the draft.**
+- Bar-1 phrasing stays "not met because it is a ceiling test" (+0.003 vs
+  lagged_hybrid, parity), never "beats" (addendum in
+  RESULTS-COMBINED-FIX-POLICY-2026-09-07.md records the identical-method CI
+  for every parity contrast).
+- All runs self-gate (percentile 0.85, `u_gate.mode: both` from step 900);
+  prose never describes them as ungated, and the null payoff reading applies
+  to self-gated training.
+- "Partial transfer becomes full transfer once both known failure modes are
+  addressed" is the DelayedBimodal closer; "transfers across environments
+  under an adequate budget" is the DMC verdict still to be earned.

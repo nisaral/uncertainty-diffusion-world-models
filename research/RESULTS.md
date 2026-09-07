@@ -117,3 +117,23 @@ budget"; the 30-seed adjudication is held pending the registered budget probe
    is percentile (T6). Registration:
    [DMC-PAYOFF-PREREGISTRATION-2026-09-05.md](DMC-PAYOFF-PREREGISTRATION-2026-09-05.md)
    (Addendum 3).
+4. **Gate-off control arm registered + adequate-budget knobs pre-committed.**
+   `ordinary_gate_off` (ordinary distillation, `u_gate.mode: off`) is a
+   registered payoff control (Addendum 4) with its own adjudication rule;
+   `configs/dmc_hopper_payoff_30k.yaml` stages the Amendment-2 budget (30k
+   steps, `eval_freq: 3000`) but must not run before the budget probe's
+   decision rule records Amendment 2.
+5. **Combined-fix parity contrasts re-verified under one method.** The
+   combined-vs-ordinary u-rank contrast now carries the identical-method
+   paired bootstrap (wins/N + CI + P) recorded in the results doc addendum:
+   +0.0142, 6/10, CI [-0.0132, +0.0464] - parity, not exceedance; correct
+   phrasing is "met parity on a ceiling-bound benchmark".
+6. **Literature metadata corrected (2026-09-07 second pass).** MACURA venue =
+   ICML 2024 (not RLDM); Biased Dreams exact title "...in Latent Space
+   Models"; GIRL venue unconfirmed (cite as arXiv); AAAI-Liu + ELVIS
+   metadata confirmed. Recorded in
+   `papers/LITERATURE-VALIDATION-2026-09.md`; entries in
+   `papers/references.bib`. New gaps G7 (normalization-controlled w-channel
+   contrast - closes the Theorem 7 caveat) and G8 (EMA-at-parity capacity-
+   competition theory target) are in
+   `research/NOVEL-GAPS-2026-09-07.md`.

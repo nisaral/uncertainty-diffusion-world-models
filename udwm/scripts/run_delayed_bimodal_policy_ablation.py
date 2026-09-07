@@ -145,6 +145,21 @@ VARIANTS = {
         "distill_guard_enabled": True,
         "distill_value_warmup_updates": 50,
     },
+    # Payoff gate-off control (registered: research/DMC-PAYOFF-PREREGISTRATION
+    # Addendum 4, 2026-09-07). Ordinary distillation (every decision weight
+    # zero) with the U-gate disabled, so the payoff contrast can separate
+    # "the preserved u object helps gating" from "gating itself helps or
+    # hurts" while keeping the model arm identical to `ordinary`. Root-level
+    # overrides (u_gate) are applied by make_cfg via the special `_root` key.
+    "ordinary_gate_off": {
+        "distill_decision_weight": 0.0,
+        "distill_value_variance_weight": 0.0,
+        "distill_hybrid_state_weight": 0.0,
+        "distill_hybrid_pairwise_weight": 0.0,
+        "distill_geometry_weight": 0.0,
+        "distill_pairwise_weight": 0.0,
+        "_root": {"u_gate": {"mode": "off"}},
+    },
 }
 
 
@@ -162,6 +177,14 @@ def make_cfg(base, variant, seed, steps):
     teacher_calls = max(1, min(3, available_calls - 1))
     cfg["model"]["distill_teacher_pretrain_updates"] = teacher_calls * epochs
     cfg["model"].update(VARIANTS[variant])
+    # Root-level overrides declared by a variant (currently only u_gate for
+    # the ordinary_gate_off payoff control) must land on the config root, not
+    # under model. Dict values merge so unset u_gate fields keep defaults.
+    for root_key, root_val in (VARIANTS[variant].get("_root") or {}).items():
+        if isinstance(root_val, dict):
+            cfg.setdefault(root_key, {}).update(root_val)
+        else:
+            cfg[root_key] = root_val
     return cfg
 
 
