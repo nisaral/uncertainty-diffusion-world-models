@@ -52,6 +52,16 @@ What this file verifies numerically (all mirrors of the udwm estimators):
     of the decision score (a rank-preserving but scale-collapsed student gates
     identically to the teacher); absolute-threshold gating is not.
 
+  Theorem 7 (moving-target decomposition; the two fixes compose)
+    With the decision map frozen over the distillation window (lagged target
+    critic), the equal-weight M>=2 flow converges to the frozen (w*, g*) from
+    ANY start (init-independent), while the M=1 hybrid flow lands on the
+    S-fibre at zero loss with an initialization-dependent decision statistic
+    (fibre memory).  The student's residual vs the eval-time map decomposes
+    into the optimization gap at the frozen map (removed by the equal-weight
+    M>=2 loss) plus the map drift over the window (removed by lagging): the
+    two fixes act on disjoint error terms.
+
 Run (from repo root)::
 
     python theory/identifiability_frontier.py
@@ -366,6 +376,97 @@ def part6_gating_robustness():
                 "(stops ~nothing)", stopped_s < 1e-3)
 
 
+def _gd_eq(z, zt, eta):
+    """One GD step of the equal-weight M>=2 loss (w-w*)^2 + (g-g*)^2."""
+    return z - 2.0 * eta * (z - zt)
+
+
+def _gd_hy(z, zt, c, eta):
+    """One GD step of the M=1 single-latent loss (S-S*)^2, S = w + c g."""
+    s = z[0] + c * z[1]
+    st = zt[0] + c * zt[1]
+    return z - 2.0 * eta * (s - st) * np.array([1.0, c])
+
+
+def part7_composition():
+    print("=" * 92)
+    print("PART 7 -- Theorem 7: moving-target decomposition; the equal-weight")
+    print("          M>=2 loss and the lagged map act on disjoint error terms.")
+    ok = True
+    eta = 0.05
+    steps = 3000
+    z_tau = np.array([1.0, 3.0])     # frozen map over the window; u* = -2
+    u_star = z_tau[0] - z_tau[1]
+    starts = [np.array([2.0, 1.5]), np.array([0.5, 6.0])]
+
+    # T7a-1: equal-weight M>=2 flow is init-independent at a frozen map.
+    ends = []
+    for z0 in starts:
+        z = z0.copy()
+        for _ in range(steps):
+            z = _gd_eq(z, z_tau, eta)
+        ends.append(z.copy())
+    u_ends = [z[0] - z[1] for z in ends]
+    ok &= check(
+        "T7a eq M>=2 flow converges to the frozen map from any start "
+        "(decision statistic is init-independent)",
+        all(abs(u - u_star) < 1e-2 for u in u_ends)
+        and abs(u_ends[0] - u_ends[1]) < 1e-3,
+        detail=f"u endpoints {u_ends[0]:.4f}, {u_ends[1]:.4f} vs u* "
+               f"{u_star:.1f}")
+
+    # T7a-2: M=1 hybrid flow reaches the S-fibre at zero loss, but which
+    # point (hence u_s) is initialization-dependent: fibre memory.
+    c = 0.25  # (1-rho)(N-1)/N at N=5, rho = 0.6875
+    s_star = z_tau[0] + c * z_tau[1]
+    hy_ends = []
+    for z0 in starts:
+        z = z0.copy()
+        for _ in range(steps):
+            z = _gd_hy(z, z_tau, c, eta)
+        hy_ends.append(z.copy())
+    s_ends = [z[0] + c * z[1] for z in hy_ends]
+    hy_u = [z[0] - z[1] for z in hy_ends]
+    ok &= check(
+        "T7a hybrid M=1 flow reaches the S-fibre at zero loss but its "
+        "decision statistic depends on the start (fibre memory; lagging "
+        "alone supplies no loss-level identifiability)",
+        all(abs(s - s_star) < 1e-6 for s in s_ends)
+        and abs(hy_u[0] - hy_u[1]) > 0.2 * abs(u_star),
+        detail=f"u endpoints {hy_u[0]:.3f}, {hy_u[1]:.3f} on the fibre "
+               f"(S*={s_star:.3f}); |uA-uB| = "
+               f"{abs(hy_u[0] - hy_u[1]):.3f} > 0.2|u*| = "
+               f"{0.2 * abs(u_star):.3f}")
+
+    # T7b: drift decomposition over a distillation window.  Map frozen at tau
+    # (lagged), evaluated at T = tau + drift.  Residual = opt gap + drift,
+    # with the bound tight (gap -> 0), across 200 random drift directions.
+    rng = np.random.default_rng(SEED + 7)
+    gaps, resids, drifts = [], [], []
+    n_trials = 200
+    for _ in range(n_trials):
+        drift = rng.normal(0.0, 0.5, size=2)   # window drift in (w, g)
+        z_T = z_tau + drift
+        z = starts[0].copy()
+        for _ in range(steps):
+            z = _gd_eq(z, z_tau, eta)
+        gaps.append(np.linalg.norm(z - z_tau))
+        resids.append(np.linalg.norm(z - z_T))
+        drifts.append(np.linalg.norm(z_T - z_tau))
+    gaps = np.asarray(gaps)
+    resids = np.asarray(resids)
+    drifts = np.asarray(drifts)
+    ok &= check(
+        "T7b lagged eq residual is the map drift over the window up to a "
+        "vanishing optimization gap (bound tight on 200 drift draws)",
+        gaps.max() < 1e-2 * drifts.mean()
+        and np.median(abs(resids - drifts)) < 1e-2 * drifts.mean(),
+        detail=f"median |resid - drift| = "
+               f"{np.median(abs(resids - drifts)):.2e}; max opt gap "
+               f"{gaps.max():.2e}; mean drift {drifts.mean():.3f}")
+    return ok
+
+
 if __name__ == "__main__":
     part1_fiber()
     part2_coupling_erosion()
@@ -373,5 +474,6 @@ if __name__ == "__main__":
     part4_sufficiency()
     part5_ema_inversion()
     part6_gating_robustness()
+    part7_composition()
     print("=" * 92)
     print("Done. Companion doc: research/proofs/identifiability-frontier.md")

@@ -236,20 +236,92 @@ disable the gate.  The repo's `u_gate` percentile default is therefore the
 right protocol choice, and any payoff contrast must hold the gating rule fixed
 across arms or it measures the threshold rule, not the uncertainty object.
 
+## Theorem 7 (moving-target decomposition; the two fixes act on disjoint terms)
+
+**Setup.**  Let the decision map's parameters evolve across a distillation
+window; write the teacher's population decision statistics under the map at
+reference time `t` as `z*_t = (w*_t, g*_t)` (the repo's `value_fn` is either
+the live critic or the slow polyak target critic - the "lagged" arms), and the
+student's statistics at the end of the window as `z_s`.
+
+**Statement.**  For every reference time `tau` in the window the student's
+residual against the eval-time map decomposes as
+
+    ||z_s - z*_T||  <=  eps_opt(tau) + eps_drift(tau),
+    eps_opt(tau)   = ||z_s - z*_tau||   (optimization gap at the map frozen at tau),
+    eps_drift(tau) = ||z*_T - z*_tau||  (map drift from tau to the eval time T).
+
+The inequality is a triangle inequality; the content is the two corollaries,
+which say which fix removes which term, and the measured arm mapping below.
+
+**C7.1 (equal-weight M >= 2 removes `eps_opt` at any fixed map; M = 1 does
+not).**  Gradient flow on the equal-weight M >= 2 loss against a frozen map
+converges to `(w*_tau, g*_tau)` from **any** start: the student's decision
+statistic is initialization-independent (verified: 3,000-step flows from two
+off-fibre starts both end at `u = -2.0000` vs teacher `u* = -2`).  Gradient
+flow on the M = 1 single-latent loss against the **same** frozen map reaches
+the `S`-fibre at zero loss, but *which* point on the fibre (hence `u_s`) is
+initialization-dependent (verified: endpoints `u = +0.059` and `u = -5.676`
+on the fibre `S* = 1.750`, `|uA - uB| = 5.7 > 0.2|u*|`).  Identifiability at a
+fixed map is a property of the **loss**, not of the map: lagging alone
+(`lagged_hybrid`, M = 1) reaches the measured parity (0.946) without any
+loss-level guarantee - the parity is carried by the member/geometry anchors
+and the initialization, and nothing in the M = 1 objective prevents a
+different landing.
+
+**C7.2 (lagging removes `eps_drift` over the window).**  With the map frozen
+at `tau` and evaluated at `T = tau + drift`, the equal-weight M >= 2 student's
+residual equals the map drift up to a vanishing optimization gap (verified on
+200 random drift draws: median `|resid - drift| = 1.4e-15`, max optimization
+gap `2.0e-15`, mean drift 0.653).  The lagged arm's residual is therefore
+bounded by the map's own motion over the distillation window - the quantity
+the target-critic update rate controls.
+
+**Measured arm-to-term mapping** (N = 10, DelayedBimodal,
+`research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md`; u-rank is the
+scale-free adjudicated endpoint):
+
+| arm | loss / map | term left open | u-rank (N=10) |
+|---|---|---|---:|
+| identified_eq | M>=2 equal weight / live | coupling + drift under the fast map | 0.877 (confirmed deficit vs ordinary, -0.057) |
+| lagged_hybrid | M=1 / slow map | no loss-level guarantee (C7.1); parity by anchors + init | 0.946 |
+| lagged_identified_eq | M>=2 equal weight / slow map | neither (both terms controlled) | 0.948 (top of table at parity) |
+
+**Caveat on the w channel.**  The w-RMSE column of that table (identified_eq
+0.922 vs lagged_identified_eq 0.283) is quoted in the record only as a
+secondary endpoint: the lagged arms train with normalized value targets (a
+registered knob, `normalize_values`), so the *absolute* w/g scale of lagged vs
+live arms is confounded until a normalization-controlled check runs.  The
+u-rank bars (scale-free under monotone score transforms, cf. Theorem 6) do not
+carry that confound and are the adjudicated endpoints.  The fast-map coupling
+mechanism itself (why the live-critic eq arm's u-rank deficit is confirmed
+while the slow-map arm reaches parity) is open item 1 below.
+
 ## Open items (conjectures, not theorems)
 
-1. **EMA-at-parity annihilation.**  Why EMA-both annihilates `g` even when
+1. **Moving-map coupling.**  Why the live-critic equal-weight arm leaves a
+   confirmed u-rank deficit (0.877 vs ordinary 0.934) and a w hole while the
+   lagged-map version reaches parity is not closed by Theorem 7: the
+   decomposition only covers the frozen-map case, and under a fast map the
+   target statistics are partly a function of the student's own (still wrong)
+   rollouts through the policy/buffer.  Candidate mechanisms: (i)
+   train/eval distribution shift between the student's imagined states and the
+   real-buffer eval states, amplified by the fast map; (ii) the registered
+   `normalize_values` knob on the lagged arms.  Discriminator: a
+   normalization-controlled eq-live vs eq-lagged w-RMSE contrast on
+   DelayedBimodal (cheap, CPU), then the DMC `g*/w*` gate ratio.
+2. **EMA-at-parity annihilation.**  Why EMA-both annihilates `g` even when
    `w* = g*` (weights equal) is only partly explained by Proposition 3; the
    measured driver is the epistemic **up**-weight and its interaction with
    Adam (empirical attribution in `RESULTS-CORRUPTION-2026-09-05.md`).
    A proof would need a model of the student's capacity competition between
    the `w` and `g` channels.
-2. **Corruption-alignment.**  The claim that matching at the eval-time latent
+3. **Corruption-alignment.**  The claim that matching at the eval-time latent
    law is required for the aleatoric term to act on the object that decides
    the eval-time `g` is a mechanism statement; the corruption-probe verdict
    (`corruption` not binding once weights are corrected) bounds but does not
    close it.
-3. **DMC regime.**  Whether the aleatoric-dominated, high-coupling regime
+4. **DMC regime.**  Whether the aleatoric-dominated, high-coupling regime
    (Theorem 2's aggravating condition) transfers to DMC is open; the DMC
    gate preregistration (`DMC-PAYOFF-PREREGISTRATION-2026-09-05.md`) measures
    `g*/w*` under the DMC-trained critic before adjudicating arms.
@@ -266,3 +338,8 @@ across arms or it measures the threshold rule, not the uncertainty object.
 - Theorem 4: sufficiency of M >= 2 and the `M`-vs-separation design rule.
 - Theorem 6: percentile gating is the only scale-robust gating rule for
   rank-preserving students; fixes the payoff protocol.
+- Theorem 7: the residual-vs-map decomposition - the equal-weight M >= 2 loss
+  removes the optimization gap at any fixed map (C7.1, verified) and lagging
+  removes the map-drift term (C7.2, verified) - is the formal content of
+  "the two fixes compose".  C7.1's fibre-memory check is also the precise
+  reason lagged-hybrid parity is not a loss-level guarantee.

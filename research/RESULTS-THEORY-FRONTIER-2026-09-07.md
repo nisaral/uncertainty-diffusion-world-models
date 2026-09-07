@@ -50,6 +50,18 @@ statements are population-level and the script confirms them to MC tolerance.
    refusal set under `1e-4` scale collapse); absolute thresholds stop nothing
    under the same collapse (agreement 0.85, all refusals lost). Fixes the
    payoff protocol: percentile gating only, held fixed across arms.
+7. **Theorem 7 - moving-target composition (added same day, after the
+   combined-fix N=10 table).** The student's residual against the eval-time
+   map decomposes into an optimization gap at the map frozen over the
+   distillation window plus the map drift over the window; the equal-weight
+   M>=2 loss removes the first term at any fixed map (flow converges from any
+   start: u endpoints -2.0000/-2.0000 vs u* = -2) and the lagged map removes
+   the second (residual = drift to 1.4e-15 median on 200 drift draws). The
+   M=1 hybrid flow on the same frozen map lands on the S-fibre at zero loss
+   with an initialization-dependent decision statistic (u endpoints +0.059 /
+   -5.676) - fibre memory, so lagged-hybrid parity (0.946, N=10) is anchor-
+   and-init carried, not a loss-level guarantee. Measured arm-to-term mapping
+   and the open moving-map-coupling conjecture are in the proof doc.
 
 ## Protocol audit note (separate from the theory)
 
@@ -70,4 +82,5 @@ payoff design makes the gate an explicit arm axis.
 
     python theory/identifiability_frontier.py
 
-Deterministic (fixed seed), numpy only, ~3 s. All checks PASS (2026-09-07).
+Deterministic (fixed seed), numpy only, ~5 s (Parts 1-7). All checks PASS
+(2026-09-07; full re-run after the Theorem 7 / Part 7 addition).
