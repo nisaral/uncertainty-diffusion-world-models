@@ -452,3 +452,55 @@ ordinary and lagged_hybrid). Narrative consequences, stated exactly:
    rank-only (G7); Proposition 8 gives the quantitative can/cannot-identify
    statement (M=1 decision-statistic uncertainty does not shrink as
    population risk -> 0; M>=2 rate sqrt(eps), tight coefficient sqrt(2)).
+
+---
+
+## Addendum 2026-09-08 (DMC 30-seed verdict landed): mechanism transfers, ordering does not
+
+The 30-seed adjudication at the amended 15k budget completed
+(`research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md`). The venue-norm
+item 1 of the 2026-09-07 addendum ("DMC verdict under an adequate budget") is
+now answered, and the answer is precise in both directions:
+
+1. **Controls pass 30/30 (cross-environment mechanism transfer).** The EMA
+   weighting collapse reproduces (identified_hybrid mean -0.076, 0/30 >=
+   0.70; ordinary - EMA +1.034 [+0.988, +1.079]) and equal-weight identified
+   clears the collapse control (eq - EMA +0.788 [+0.736, +0.840], 30/30).
+   The weighting attribution of 2026-09-05 is a general mechanism, not a
+   DelayedBimodal artifact.
+2. **The DelayedBimodal practical ordering does not transfer.** Both
+   registered identified_eq bars fail (15/30 >= 0.70; eq - hybrid is a wash,
+   -0.020, 13/30, CI includes 0 - versus +0.214, 10/10 on DelayedBimodal).
+   lagged_identified_eq - top of the DelayedBimodal table - is below
+   identified_eq on DMC (-0.073 [-0.111, -0.036], 7/30): the n=2 reversal is
+   confirmed at N=30. ordinary (plain, self-gated, 0.957, 30/30 >= 0.70) is
+   the top arm; every candidate fix sits below it (lagged_hybrid -0.121,
+   0/30; eq -0.246, 0/30). The lag axis is loss-family-dependent on the
+   drifting map: +0.106 for the hybrid family (22/30), -0.073 for the
+   equal-weight identified family.
+3. **What the paper now says, exactly.** The headline stays the
+   distillation-identifiability mechanism (Theorem 1/3/5/7/8, Proposition 8)
+   with the measured failure (EMA weighting annihilates the aleatoric
+   channel) and its correction (equal weights at M >= 2) as the empirical
+   payload. The cross-environment chapter reads: the *failure modes* are
+   general; the *practical ordering* is benchmark-dependent, and on
+   hopper-hop at 15 episodes the plain self-gated baseline is the top u-rank
+   arm. "Partial transfer becomes full transfer once both known failure
+   modes are addressed" is now explicitly a DelayedBimodal-scale statement,
+   not a general one - the DMC verdict earned the negative it was designed
+   to adjudicate, with tight CIs on both sides.
+4. **Gate-off control: neutral at 15k.** ordinary_gate_off - ordinary
+   final_return +0.025 [-0.057, +0.109], 15/30 (reading rule ii: gating is
+   return-neutral at this budget; the u-rank story is the whole measurable
+   payoff). Return endpoints stay deferred (floor-bound); the descriptive
+   lagged_identified_eq return lead (+0.101, CI excludes 0, 15/30) is a
+   hypothesis for the conditional 30k payoff extension, not a result.
+5. **Remaining to earn for main-track.** With the DMC verdict landed, the
+   honest-to-venue position is: mechanism paper with a proof plus a clean
+   two-benchmark empirical chapter (positive control on DelayedBimodal,
+   precise negative on the transfer ordering at DMC/15k), and the still-open
+   positive-control payoff result (does preserved u improve return under an
+   adequate budget) as the conditional 30k extension. Venue norm question
+   now reduces to whether the mechanism + clean-negative empirical payload
+   stands alone - the discipline notes (bar phrasing, self-gating, w-scale
+   rank-only, citation block) all carry over unchanged.

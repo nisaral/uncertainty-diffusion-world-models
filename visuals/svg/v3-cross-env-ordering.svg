@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="600" viewBox="0 0 1080 600" font-family="Segoe UI, Arial, sans-serif">
+<rect x="0" y="0" width="1080" height="600" fill="#ffffff"/>
+<text x="36" y="38" font-size="24" font-weight="700" fill="#0f172a">The transfer-ordering flip: same six arms, two environments</text>
+<text x="36" y="64" font-size="14.5" fill="#475569">Mean u_rank_corr (rank correlation of teacher U vs student U). DelayedBimodal N=10 (1,800 steps) vs DMC hopper-hop N=30 (15,000 steps). u-rank is the only</text>
+<text x="36" y="84" font-size="14.5" fill="#475569">scale-free endpoint here - w_rmse and return are NOT comparable across environments (different units). Arms are ordered by the DelayedBimodal result.</text>
+<line x1="752.6" y1="112" x2="752.6" y2="508" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="758.608695652174" y="106" font-size="12.5" font-weight="700" fill="#64748b">registered bar 0.70</text>
+<line x1="338.7" y1="112" x2="338.7" y2="508" stroke="#cbd5e1" stroke-width="1"/>
+<text x="334.69565217391306" y="532" font-size="12" fill="#94a3b8" text-anchor="end">0</text>
+<text x="930" y="532" font-size="12" fill="#94a3b8" text-anchor="end">1.0</text>
+<text x="238" y="152" font-size="14.5" font-weight="600" fill="#0f172a" text-anchor="end">lagged eq</text>
+<rect x="338.7" y="124" width="560.7" height="16" rx="2" fill="#0f766e" opacity="0.35"/>
+<rect x="338.7" y="142" width="377.1" height="16" rx="2" fill="#0f766e" opacity="0.95"/>
+<text x="905.4" y="134" font-size="12" fill="#64748b">0.948</text>
+<text x="721.8" y="153" font-size="12.5" font-weight="700" fill="#0f172a">0.638</text>
+<text x="936" y="134" font-size="11" fill="#94a3b8">DB 10/10 >= 0.70</text>
+<text x="936" y="153" font-size="11" fill="#64748b">DMC 8/30 >= 0.70</text>
+<rect x="36" y="114" width="176" height="22" rx="11" fill="#fee2e2"/>
+<text x="124" y="129" font-size="12.5" font-weight="700" fill="#b91c1c" text-anchor="middle">REVERSAL: 0.948 -> 0.638</text>
+<text x="238" y="216" font-size="14.5" font-weight="600" fill="#0f172a" text-anchor="end">lagged_hybrid</text>
+<rect x="338.7" y="188" width="559.2" height="16" rx="2" fill="#c2410c" opacity="0.35"/>
+<rect x="338.7" y="206" width="494.8" height="16" rx="2" fill="#c2410c" opacity="0.95"/>
+<text x="903.9" y="198" font-size="12" fill="#64748b">0.946</text>
+<text x="839.5" y="217" font-size="12.5" font-weight="700" fill="#0f172a">0.837</text>
+<text x="936" y="198" font-size="11" fill="#94a3b8">DB 10/10 >= 0.70</text>
+<text x="936" y="217" font-size="11" fill="#64748b">DMC 27/30 >= 0.70</text>
+<text x="238" y="280" font-size="14.5" font-weight="600" fill="#0f172a" text-anchor="end">ordinary</text>
+<rect x="338.7" y="252" width="552.3" height="16" rx="2" fill="#1d4ed8" opacity="0.35"/>
+<rect x="338.7" y="270" width="566.1" height="16" rx="2" fill="#1d4ed8" opacity="0.95"/>
+<text x="897.0" y="262" font-size="12" fill="#64748b">0.934</text>
+<text x="910.8" y="281" font-size="12.5" font-weight="700" fill="#0f172a">0.957</text>
+<text x="936" y="262" font-size="11" fill="#94a3b8">DB 10/10 >= 0.70</text>
+<text x="936" y="281" font-size="11" fill="#64748b">DMC 30/30 >= 0.70</text>
+<rect x="36" y="242" width="166" height="22" rx="11" fill="#dbeafe"/>
+<text x="119" y="257" font-size="12.5" font-weight="700" fill="#1d4ed8" text-anchor="middle">tops the DMC table (30/30)</text>
+<text x="238" y="344" font-size="14.5" font-weight="600" fill="#0f172a" text-anchor="end">eq</text>
+<rect x="338.7" y="316" width="518.9" height="16" rx="2" fill="#16a34a" opacity="0.35"/>
+<rect x="338.7" y="334" width="420.6" height="16" rx="2" fill="#16a34a" opacity="0.95"/>
+<text x="863.6" y="326" font-size="12" fill="#64748b">0.877</text>
+<text x="765.3" y="345" font-size="12.5" font-weight="700" fill="#0f172a">0.711</text>
+<text x="936" y="326" font-size="11" fill="#94a3b8">DB 10/10 >= 0.70</text>
+<text x="936" y="345" font-size="11" fill="#64748b">DMC 15/30 >= 0.70</text>
+<rect x="36" y="306" width="150" height="22" rx="11" fill="#dcfce7"/>
+<text x="111" y="321" font-size="12.5" font-weight="700" fill="#15803d" text-anchor="middle">mechanism transfer (30/30)</text>
+<text x="238" y="408" font-size="14.5" font-weight="600" fill="#0f172a" text-anchor="end">hybrid</text>
+<rect x="338.7" y="380" width="375.8" height="16" rx="2" fill="#f59e0b" opacity="0.35"/>
+<rect x="338.7" y="398" width="432.2" height="16" rx="2" fill="#f59e0b" opacity="0.95"/>
+<text x="720.5" y="390" font-size="12" fill="#64748b">0.636</text>
+<text x="776.9" y="409" font-size="12.5" font-weight="700" fill="#0f172a">0.731</text>
+<text x="936" y="390" font-size="11" fill="#94a3b8">DB 2/10 >= 0.70</text>
+<text x="936" y="409" font-size="11" fill="#64748b">DMC 21/30 >= 0.70</text>
+<text x="238" y="472" font-size="14.5" font-weight="600" fill="#0f172a" text-anchor="end">EMA</text>
+<rect x="338.7" y="444" width="67.2" height="16" rx="2" fill="#dc2626" opacity="0.35"/>
+<rect x="293.6" y="462" width="45.1" height="16" rx="2" fill="#dc2626" opacity="0.95"/>
+<text x="411.9" y="454" font-size="12" fill="#64748b">0.114</text>
+<text x="299.6" y="473" font-size="12.5" font-weight="700" fill="#0f172a">-0.076</text>
+<text x="936" y="454" font-size="11" fill="#94a3b8">DB 0/10 >= 0.70</text>
+<text x="936" y="473" font-size="11" fill="#64748b">DMC 0/30 >= 0.70</text>
+<rect x="36" y="542" width="40" height="12" rx="2" fill="#64748b" opacity="0.35"/>
+<text x="84" y="553" font-size="12.5" fill="#334155">DelayedBimodal (N=10, easier regime)</text>
+<rect x="356" y="542" width="40" height="12" rx="2" fill="#64748b"/>
+<text x="404" y="553" font-size="12.5" fill="#334155">DMC hopper-hop (N=30, harder regime)</text>
+<text x="610" y="553" font-size="12.5" fill="#334155">EMA mean is negative on DMC (-0.076), drawn left of zero</text>
+</svg>

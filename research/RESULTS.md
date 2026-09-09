@@ -169,3 +169,20 @@ budget"; the 30-seed adjudication is held pending the registered budget probe
    14,292 (aleatoric-dominated). Amendment 2 sets the adjudication budget to
    15,000 steps; 3.6k DMC rows superseded.
    [RESULTS-DMC-BUDGET-PROBE-2026-09-08.md](RESULTS-DMC-BUDGET-PROBE-2026-09-08.md)
+
+---
+
+## Addendum 2026-09-08 (30-seed DMC verdict): mechanism transfers, ordering does not
+
+30-seed x six-arm adjudication at 15k (Amendment 2 budget) completed
+(`runs/dmc_payoff_30seed_15k_gpu.json` + `*_ctrl.json`, all seeds exact
+teacher match). Registered bars for identified_eq NOT met (15/30 >= 0.70; eq -
+hybrid -0.020 [-0.067, +0.030], 13/30 wash). Controls MET 30/30: EMA collapse
+reproduces (mean -0.076, 0/30 >= 0.70; ordinary - EMA +1.034) and eq - EMA
++0.788. Combined-fix arm (lagged_identified_eq) confirmed below eq (-0.073,
+CI excludes 0, 7/30) - the DelayedBimodal ordering reversal is real at N=30;
+on DMC the plain self-gated ordinary arm tops the table (0.957, 30/30) and the
+lag axis is loss-family-dependent (lagged_hybrid - hybrid +0.106, 22/30;
+lagged_eq - eq -0.073). Gate-off control return-neutral at 15k (+0.025, CI
+includes 0); return thread deferred per registration.
+[RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md](RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md)

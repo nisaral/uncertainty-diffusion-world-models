@@ -5,6 +5,12 @@ number, follow the links in the [README](README.md) and the result index
 [`research/RESULTS.md`](research/RESULTS.md). This file exists so a first-time
 reader can get the story before the statistics.
 
+**Visual entry points:** interactive verdict explorer
+[`visuals/v4-explorer.html`](visuals/v4-explorer.html) - 90-second story, EMA-collapse curves,
+ordering flip, per-arm tables (self-contained, works offline / on GitHub Pages). Static figures
+for the repo main page: [`visuals/svg/v1-identifiability-skip.svg`](visuals/svg/v1-identifiability-skip.svg),
+[`visuals/svg/v3-cross-env-ordering.svg`](visuals/svg/v3-cross-env-ordering.svg).
+
 ## The problem in one paragraph
 
 Diffusion world models are good simulators of an environment, but slow: one
@@ -90,13 +96,26 @@ mechanism, measured twice.
    operating-point-bound, not tied to naive-loss instability across
    environments.
 
+
+9. **Cross-environment verdict (2026-09-08)** - The 30-seed x six-arm
+   adjudication at the amended 15k budget completed. Controls pass 30/30:
+   the EMA collapse reproduces cross-environment (mean -0.076, 0/30 >= 0.70)
+   and equal-weight identified clears it (+0.788, 30/30) - the mechanism is
+   general. The practical ordering is not: both registered eq bars fail
+   (15/30 >= 0.70; eq - hybrid is a wash, 13/30), the combined-fix arm lands
+   below eq on DMC (-0.073, 7/30, confirming the n=2 reversal at N=30), and
+   the plain self-gated ordinary arm tops the table (0.957, 30/30). Gate-off
+   control is return-neutral at 15k; returns stay deferred. Full record:
+   research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md
+
 ## What the numbers are not
 
 - Not a new world model. Not conformal coverage (`sqrt(U)` is a score, not a
   calibrated interval). Not a policy/SOTA claim. Not a claim that gated
   imagination is new (it is not - see MACURA).
-- Small benchmarks: toy/DelayedBimodal fully adjudicated; DMC pending the
-  budget probe. No pixels.
+- Small benchmarks: toy/DelayedBimodal fully adjudicated; DMC/hopper-hop
+  adjudicated at 15k (2026-09-08: mechanism controls 30/30; transfer-ordering
+  bars not met). No pixels.
 
 ## How to reproduce
 
@@ -126,14 +145,18 @@ bit-identical.
 | Theory (identifiability, estimator bias/variance, balance window) | `theory/` |
 | Every result + its pre-registration | `research/` (index: `research/RESULTS.md`) |
 
-## Status board (2026-09-07)
+## Status board (2026-09-08)
 
 - Identifiability theorem: proven, with exact-construction verification.
 - Fixed-map stress N=50: adjudicated. Falsified live-critic transfer: N=30,
   adjudicated. EMA attribution bug: found, fixed, re-adjudicated.
-- Equal-weight identified transfer: N=10 bars met (partial, below parity).
-- Combined fix: N=10, top of table at parity (DelayedBimodal); DMC verdict
-  pending registered budget probe; combined arm rides along.
+- Equal-weight identified transfer: N=10 bars met on DelayedBimodal
+  (partial, below parity); DMC 30-seed verdict (2026-09-08): eq clears the
+  EMA collapse control 30/30 but fails both position bars (eq - hybrid wash;
+  -0.246 below ordinary).
+- Combined fix: N=10, top of table at parity (DelayedBimodal); on DMC the
+  combined arm is below eq (-0.073, 7/30) - a DelayedBimodal-scale result;
+  ordinary is the top u-rank arm on hopper-hop at 15k (0.957, 30/30).
 - Paper: not yet a submission. GitHub: this repo. Hugging Face: diagnostic
   checkpoint artifact released (teacher + students incl. the broken and fixed
   arms; DelayedBimodal seed 0):

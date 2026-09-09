@@ -1,0 +1,485 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>UDWM - DMC verdict tour: uncertainty-preserving distillation for diffusion world models</title>
+<style>
+  :root{
+    --ink:#0f172a; --mut:#475569; --faint:#94a3b8; --line:#e2e8f0;
+    --card:#ffffff; --bg:#f1f5f9; --accent:#1d4ed8;
+    --c-ordinary:#1d4ed8; --c-hybrid:#f59e0b; --c-lagged_hybrid:#c2410c;
+    --c-identified_hybrid:#dc2626; --c-identified_eq:#16a34a; --c-lagged_identified_eq:#0f766e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 "Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px 60px}
+  header.hero{background:linear-gradient(180deg,#0f172a 0%,#1e293b 100%);color:#e2e8f0;
+              padding:42px 20px 30px}
+  header.hero .wrap{max-width:1080px}
+  .eyebrow{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:#93c5fd;margin:0 0 10px;font-weight:600}
+  h1{font-size:30px;line-height:1.2;margin:0 0 14px;color:#fff;max-width:900px}
+  .lede{font-size:16px;color:#cbd5e1;max-width:960px;margin:0 0 6px}
+  .lede b{color:#fff}
+  .hero .note{font-size:12.5px;color:#94a3b8;margin:10px 0 0}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:26px 0 18px}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px 16px 14px}
+  .card .k{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;font-weight:700;margin-bottom:8px}
+  .card .big{font-size:34px;font-weight:800;color:#fff;line-height:1.05;margin-bottom:6px}
+  .card .big small{font-size:15px;font-weight:600;color:#cbd5e1}
+  .card p{font-size:13.5px;color:#cbd5e1;margin:0}
+  .card .stat{color:#93c5fd}
+  nav.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .chip{background:#334155;color:#e2e8f0;border:1px solid #475569;border-radius:999px;
+        padding:6px 14px;font-size:13px;cursor:pointer;user-select:none}
+  .chip:hover{background:#475569}
+  section{margin:40px 0 0}
+  h2{font-size:23px;margin:0 0 6px;color:var(--ink)}
+  h2 .tag{font-size:12.5px;color:#fff;background:var(--accent);border-radius:999px;padding:2px 10px;
+          vertical-align:middle;margin-right:8px;font-weight:700;letter-spacing:.04em}
+  .sub{color:var(--mut);margin:0 0 18px;font-size:14.5px;max-width:960px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0}
+  .svgwrap{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:auto;padding:6px}
+  .svgwrap svg{display:block;max-width:none}
+  .cap{font-size:12.5px;color:var(--mut);margin:10px 4px 0}
+  /* tour slides */
+  .slide{border:1px solid var(--line);background:#fff;border-radius:14px;padding:8px 22px 16px}
+  .slidehead{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding:10px 0}
+  .slidehead .n{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:flex;
+                align-items:center;justify-content:center;font-weight:700}
+  .slidehead h3{margin:0;font-size:18px}
+  .slidehead .pills{margin-left:auto;font-size:12px;color:var(--mut)}
+  .slide p{font-size:15px;color:#1e293b}
+  .navrow{display:flex;gap:10px;margin-top:14px;align-items:center}
+  button{font:inherit;border-radius:8px;padding:8px 16px;cursor:pointer;border:1px solid var(--line);
+         background:#fff;color:var(--ink)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.45;cursor:default}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .seg button{border:0;border-radius:0;padding:8px 18px}
+  .seg button.on{background:var(--accent);color:#fff}
+  .bars{margin:10px 0}
+  .barline{display:grid;grid-template-columns:210px 1fr 120px;gap:12px;align-items:center;margin:8px 0}
+  .barline .nm{font-size:13.5px;font-weight:600;text-align:right;overflow:hidden;text-overflow:ellipsis}
+  .barline .nm small{display:block;font-weight:400;color:var(--faint);font-size:11.5px}
+  .track{background:#f1f5f9;border-radius:6px;height:22px;position:relative}
+  .fill{position:absolute;top:0;bottom:0;border-radius:6px;min-width:2px}
+  .barline .vl{font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+  .barline .vl b{color:var(--ink)}
+  .zline{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--faint)}
+  .tickrow{display:grid;grid-template-columns:210px 1fr 120px;gap:12px;font-size:11px;color:var(--faint);margin:2px 0 12px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:#fff}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--mut);font-size:12px;letter-spacing:.03em;background:#f8fafc}
+  tr.arm td:first-child{font-weight:600}
+  .swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px}
+  .flip{color:#b91c1c;font-weight:700}
+  .okchip{display:inline-block;background:#dcfce7;color:#15803d;border-radius:999px;padding:1px 9px;font-size:11.5px;font-weight:700}
+  .nochip{display:inline-block;background:#fee2e2;color:#b91c1c;border-radius:999px;padding:1px 9px;font-size:11.5px;font-weight:700}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .gloss h4{margin:0 0 4px;font-size:15px}
+  .gloss p{margin:0;font-size:13.5px;color:var(--mut)}
+  .gloss{padding:14px 16px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;background:#fff}
+  .caveat{font-size:13.5px;color:#334155;padding:10px 14px;border-left:3px solid #f59e0b;background:#fffbeb;border-radius:6px;margin:8px 0}
+  ul.docs{list-style:none;padding:0;margin:0}
+  ul.docs li{padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{background:#f1f5f9;border-radius:4px;padding:1px 6px;font-size:12.5px}
+  footer{margin-top:60px;color:var(--faint);font-size:12.5px;border-top:1px solid var(--line);padding-top:18px}
+  .pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:700;margin-left:6px}
+  @media(max-width:760px){ .barline{grid-template-columns:130px 1fr 96px} .tickrow{grid-template-columns:130px 1fr 96px} h1{font-size:24px} }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">uncertainty-diffusion-world-models &middot; interactive result tour</p>
+    <h1>When does fixing an identifiability failure matter?</h1>
+    <p class="lede">Distilling a diffusion world model by matching the teacher&rsquo;s <b>uncertainty signal</b> is subtle: the matched statistic is one scalar, <b>w* + g* &minus; &Sigma;&#772;</b> &mdash; two unknowns. This page walks the measured story: the corrected loss&rsquo;s <b>mechanism transfers</b> across environments (EMA-collapse control 30/30 on DMC), but its <b>practical ordering does not</b> &mdash; and that boundary is the paper&rsquo;s question.</p>
+    <p class="note">All numbers below are recomputed from the local run files (exact teacher checksums, gap 0.0) by <code style="background:#334155;color:#e2e8f0">visuals/scripts/build_payload.js</code>. Sources are listed at the bottom of the page.</p>
+    <div class="cards" id="heroCards"></div>
+    <nav class="chips" id="chips">
+      <span class="chip" data-go="story">&#9654; 90-second story</span>
+      <span class="chip" data-go="geometry">V1 &middot; geometry</span>
+      <span class="chip" data-go="curves">V2 &middot; collapse curves</span>
+      <span class="chip" data-go="ordering">V3 &middot; ordering flip</span>
+      <span class="chip" data-go="metrics">per-arm metrics</span>
+      <span class="chip" data-go="arms">arm glossary</span>
+      <span class="chip" data-go="caveats">caveats</span>
+      <span class="chip" data-go="docs">sources &amp; docs</span>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="story">
+    <h2><span class="tag">STORY</span>The verdict in five slides</h2>
+    <p class="sub">The DMC 30-seed adjudication (2026-09-08) did not weaken the project &mdash; it sharpened it: mechanism transfers, ordering doesn&rsquo;t, and explaining that boundary is the paper.</p>
+    <div class="panel">
+      <div class="slide" id="slideBox">
+        <div class="slidehead">
+          <span class="n" id="slideN">1</span>
+          <h3 id="slideTitle"></h3>
+          <span class="pills" id="slidePills"></span>
+        </div>
+        <div id="slideBody"></div>
+        <div class="navrow">
+          <button id="prevSlide" class="">&larr; previous</button>
+          <button id="nextSlide" class="primary">next &rarr;</button>
+          <span style="margin-left:auto;color:var(--faint);font-size:12.5px" id="slideCount"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="geometry">
+    <h2><span class="tag">V1</span>The identifiability geometry: a strip, not a point</h2>
+    <p class="sub">Why &ldquo;match the teacher&rsquo;s uncertainty&rdquo; is not enough. At M=1 (one shared latent) the loss&rsquo;s sublevel set is a whole line of (w,g) pairs with the same matched scalar; at M&ge;2 (paired latents) it collapses onto the true point. The freedom is a property of the loss; whether the trade helps or destroys w* is a property of the value map.</p>
+    <div class="svgwrap">__V1_SVG__</div>
+    <p class="cap">Schematic (axes not to scale) with the measured DelayedBimodal annotation: teacher g* ~ 73 vs w* ~ 0.007 &mdash; the &ldquo;g &gt;&gt; w&rdquo; hole that per-term EMA reweighting converts into a full U collapse.</p>
+  </section>
+
+  <section id="curves">
+    <h2><span class="tag">V2</span>The collapse, in training curves (DMC sanity, n=10, diagnostic)</h2>
+    <p class="sub">Real logged checkpoints at 3k &rarr; 15k env steps (last eval record at each milestone; eval-side fields forward-fill between them). Arms sit in a ~0.4&ndash;0.6 floor until ~9k and separate late &mdash; the concrete reason the old 3.6k budget could not adjudicate.</p>
+    <div class="panel"><h3 style="margin-top:0">u_rank_corr over training</h3><div id="curveU"></div>
+      <p class="cap">Mean teacher&ndash;student U rank correlation across the 10 sanity seeds. EMA (identified_hybrid) flatlines near zero/noise; ordinary only jumps at 12&ndash;15k.</p></div>
+    <div class="panel"><h3 style="margin-top:0">g ratio (student g / teacher g), log scale &mdash; the aleatoric-starvation signal</h3><div id="curveG"></div>
+      <p class="cap">The EMA-reweighted arm&rsquo;s aleatoric channel is annihilated almost immediately (ratio ~ 1e-5&ndash;1e-4); equal-weight eq tracks the teacher&rsquo;s g to ~0.6&ndash;0.7. Teacher g itself decays over training (SAC reward scaling), so the ratio is the honest signal.</p></div>
+  </section>
+  <section id="ordering">
+    <h2><span class="tag">V3</span>The transfer-ordering flip</h2>
+    <p class="sub">Same six arms, two environments. On the easy regime (DelayedBimodal, N=10) the combined-fix arm <b>lagged eq</b> tops the table (0.948, 10/10). On the harder regime (DMC hopper-hop, N=30, drifting critic) it drops below eq (0.638, 8/30 &mdash; a 7/30 paired reversal) and plain self-gated <b>ordinary</b> wins (0.957, 30/30). The mechanism controls transfer; the practical ordering does not.</p>
+    <div class="svgwrap">__V3_SVG__</div>
+    <p class="cap">u_rank_corr is scale-free (rank correlation of teacher U vs student U), so it is the one endpoint that can be compared across environments. w_rmse and return scales differ and are never mixed here. Bars: light = DelayedBimodal, solid = DMC.</p>
+    <div class="panel">
+      <h3 style="margin-top:0">Interactive per-environment ranking</h3>
+      <p class="sub" style="margin-bottom:10px">Pick an environment to rank arms by its own measured u_rank mean (median shown too). The green/red chip states whether that arm met the registered &ge;0.70 bar on enough seeds.</p>
+      <div class="seg" id="envSeg"><button data-env="dmc" class="on">DMC hopper-hop (N=30)</button><button data-env="db">DelayedBimodal (N=10)</button></div>
+      <div id="rankBars" class="bars"></div>
+      <div id="rankNote" class="cap"></div>
+    </div>
+  </section>
+
+  <section id="metrics">
+    <h2><span class="tag">TABLE</span>Per-arm endpoints, one environment at a time</h2>
+    <p class="sub">Final-eval rows, adjudicated at 15k on DMC (Amendment 2) and 1,800 steps on DelayedBimodal. u_rank and n&ge;0.70 are the registered endpoints; w_rmse is rank-only (median shown; EMA&rsquo;s mean is skewed by a few seeds); next-state MSE and return are descriptive, and return was explicitly deferred on DMC.</p>
+    <div class="panel">
+      <div id="metricEnv" class="seg"><button data-env="dmc" class="on">DMC hopper-hop (N=30)</button><button data-env="db">DelayedBimodal (N=10)</button></div>
+      <div id="metricTable"></div>
+    </div>
+  </section>
+
+  <section id="arms">
+    <h2><span class="tag">GLOSSARY</span>What each arm and metric is, in one line</h2>
+    <div class="grid2" id="armGloss"></div>
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin-top:0">Metric legend</h3>
+      <table style="max-width:760px">
+        <tr><th style="width:180px">metric</th><th>plain-language meaning</th></tr>
+        <tr><td><b>u</b> / teacher U</td><td>the student&rsquo;s epistemic-uncertainty score per state (MC-UBE local estimate), the object a rollout gate consumes; teacher U is the same object from the frozen teacher ensemble.</td></tr>
+        <tr><td><b>w</b></td><td>ensemble disagreement &mdash; variance of value estimates across the 5 teacher members. One of the two unknowns in w* + g* &minus; &Sigma;&#772;.</td></tr>
+        <tr><td><b>g</b></td><td>aleatoric noise scale (intrinsic stochasticity of the transition). The other unknown. On DelayedBimodal g* ~ 73 vs w* ~ 0.007.</td></tr>
+        <tr><td><b>u_rank_corr</b></td><td>rank correlation between teacher U and student U over sampled states. 1.0 = perfect ranking preservation. Registered bar: &ge;0.70 on &ge;70% of seeds.</td></tr>
+        <tr><td><b>w_rmse</b></td><td>RMSE between teacher and student w on the value map. Different units per environment &mdash; rank claims only.</td></tr>
+        <tr><td><b>next_state_mse</b></td><td>one-step next-state prediction error of the distilled student vs its teacher targets.</td></tr>
+        <tr><td><b>final_return</b></td><td>episodic return of the policy whose imagined rollouts are gated by the student&rsquo;s U (0.85-percentile stop). Floor-bound on hopper-hop; deferred, not adjudicated.</td></tr>
+      </table>
+    </div>
+  </section>
+  <section id="caveats">
+    <h2><span class="tag">READ FIRST</span>Caveats carried into the record</h2>
+    <div class="caveat"><b>EMA w_rmse skew.</b> On DMC the EMA arm&rsquo;s w_rmse median is 1.6e-7 but its mean is ~1170 (n=30) &mdash; severe skew from a few seeds; w-magnitude claims are rank-only.</div>
+    <div class="caveat"><b>Cross-environment comparability.</b> Only u_rank_corr (and the n&ge;0.70 counts) are compared between DelayedBimodal and DMC here. w_rmse, next-state MSE and return have different units/scales per environment and are shown per-environment only.</div>
+    <div class="caveat"><b>Teacher g is non-stationary.</b> Teacher aleatoric scale decays over training (SAC reward scaling), so absolute g at 15k DMC is not comparable to 1,800-step DelayedBimodal runs; the g ratio (student/teacher) is the honest collapse signal.</div>
+    <div class="caveat"><b>Returns are deferred, not adjudicated.</b> On DMC all per-arm return means (0.056&ndash;0.201) and medians (0.013&ndash;0.075) are floor-bound on hopper-hop; the gate-off control is return-neutral (+0.025, CI includes 0). The registered reading: the u-rank story is the whole measurable payoff at 15k.</div>
+    <div class="caveat"><b>S1 sanity stays diagnostic.</b> The 10-seed curves on this page are the S1 sanity (diagnostic). Only the 30-seed S2 adjudicates; rows were never mixed across budgets/files.</div>
+  </section>
+
+  <section id="docs">
+    <h2><span class="tag">SOURCES</span>Where every number lives</h2>
+    <ul class="docs">
+      <li>Adjudication verdict (DMC 30-seed): <a href="../research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md">research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md</a></li>
+      <li>DMC preregistration (Amendment 2 budget, Addendum 4 gate-off rule): <a href="../research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md">research/DMC-PAYOFF-PREREGISTRATION-2026-09-05.md</a></li>
+      <li>DelayedBimodal combined-fix result (N=10): <a href="../research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md">research/RESULTS-COMBINED-FIX-POLICY-2026-09-07.md</a></li>
+      <li>Mechanism of the identified-arm collapse: <a href="../research/U-COLLAPSE-MECHANISM-2026-09-05.md">research/U-COLLAPSE-MECHANISM-2026-09-05.md</a></li>
+      <li>Paper-shaped assembly: <a href="../research/PAPER-NARRATIVE.md">research/PAPER-NARRATIVE.md</a> &middot; full index: <a href="../research/RESULTS.md">research/RESULTS.md</a></li>
+      <li>Theory: <a href="../theory/distill_identifiability.py">theory/distill_identifiability.py</a>, <a href="../theory/identifiability_frontier.py">theory/identifiability_frontier.py</a></li>
+    </ul>
+    <div class="panel">
+      <h3 style="margin-top:0">Payload provenance</h3>
+      <div id="provenance"></div>
+      <p class="cap">Regenerate everything: <code>node visuals/scripts/build_payload.js</code> (reads the gitignored files under <code>runs/</code>, recomputes the endpoints, fails if the adjudicated means drift, rewrites <code>visuals/data/</code>, <code>visuals/svg/</code> and this page).</p>
+    </div>
+  </section>
+
+</main>
+<footer class="wrap">
+  Uncertainty-preserving distillation for diffusion world models &mdash; generated visual tour. Numbers recomputed 2026-09-09 from local run files; rendered page carries the payload it was built with.
+</footer>
+
+<script>
+const PAYLOAD = /*__PAYLOAD_JSON__*/;
+</script>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const ARM_META = {
+  ordinary:            { display: "ordinary", color: "#1d4ed8", short: "self-gated ordinary", gloss: "Distillation of the frozen teacher mean with rollout gating on the student U score. No matched-uncertainty term - the practical DMC winner (0.957, 30/30)." },
+  hybrid:              { display: "hybrid", color: "#f59e0b", short: "M=1 conflated", gloss: "Matches teacher vs student value disagreement at ONE shared latent against the live critic: the non-identifiable baseline (level sets are strips)." },
+  lagged_hybrid:       { display: "lagged_hybrid", color: "#c2410c", short: "M=1 + lagged critic", gloss: "The same M=1 objective evaluated against the lagged target critic with value normalization + guard. Improves on hybrid in both environments." },
+  identified_hybrid:   { display: "EMA", color: "#dc2626", short: "identified + EMA reweight", gloss: "The M>=2 fix WITH per-term EMA reweighting. The aleatoric channel is starved (g ratio ~1e-5) and U collapses to noise. This is the collapse arm." },
+  identified_eq:       { display: "eq", color: "#16a34a", short: "M>=2 equal-weight", gloss: "The M>=2 equal-weight identified loss (paired latents estimate w and g separately), live critic. Mechanistically clears the EMA-collapse control 30/30." },
+  lagged_identified_eq:{ display: "lagged eq", color: "#0f766e", short: "combined fix", gloss: "M>=2 equal-weight + lagged target critic + normalization + guard. Tops DelayedBimodal (0.948, 10/10); drops below eq on DMC (0.638, 8/30) - the reversal." },
+};
+const META_OF = (key) => ARM_META[key] || { display: key, color: "#64748b", short: "", gloss: "" };
+const fmt = (x, d) => (d === undefined ? d = 2 : d, Number(x).toFixed(d));
+const fmtE = (x) => Number(x).toExponential(2);
+const byKey = (arr) => Object.fromEntries(arr.map((a) => [a.key, a]));
+const floor = (n) => Math.ceil(0.7 * n); // registered >=0.70 bar on >=70% of seeds
+
+const SLIDES = [
+  { t: "The claim: one scalar cannot identify two unknowns",
+    pills: "theory - proven, not claimed",
+    body: "<p><b>Proposition 8 / level-set geometry.</b> Matching teacher-student value disagreement at a <b>single shared latent</b> matches only <code>w* + g* - &Sigma;&#772;</code>: one scalar, two unknowns. The M=1 sublevel set is a <b>strip</b> - a whole line of (w,g) pairs with the same loss; the student can trade ensemble disagreement w for aleatoric noise g and keep the number.</p><p>The M&ge;2 identified loss draws <b>paired latents</b> and debiases the estimate, collapsing the sublevel set to a ball around the true point at rate &radic;&epsilon;. The <b>freedom</b> is a property of the loss; whether the trade helps or destroys w* is a property of the value map. Fixed-map closed form: w* + g* - &Sigma;&#772; = 55.46.</p>" },
+  { t: "The failure mode: per-term EMA reweighting collapses U",
+    pills: "measured - DMC 30/30 control, DB 0/10",
+    body: "<p>The identified loss&rsquo;s <b>g &gt;&gt; w</b> hole (DelayedBimodal: g* ~ 73 vs w* ~ 0.007) invited a per-term EMA reweighting. That reweighting <b>starves the aleatoric channel</b>: the EMA arm&rsquo;s g ratio collapses to ~1e-5 and its U ranking falls to noise.</p><p>DMC (N=30): EMA u-rank mean <b>-0.08</b>, 0/30 seeds &ge;0.70. DelayedBimodal (N=10): 0.11, 0/10. ordinary &minus; EMA = <b>+1.034 [0.988, 1.079], 30/30</b>. This is a reproducible, mechanistically-detailed instance of ensemble head-collapse under an over-shared representation (Osband et al. 2016).</p>" },
+  { t: "The mechanism transfers - the real positive",
+    pills: "DMC eq - EMA +0.788 [0.736, 0.840] 30/30",
+    body: "<p>The <b>equal-weight</b> M&ge;2 arm (<b>eq</b>) clears the EMA-collapse control in <b>both</b> environments: paired eq &minus; EMA = <b>+0.788 [+0.736, +0.840], 30/30</b> on DMC (mechanism-transfer control MET), and eq reaches 0.877 with 10/10 &ge;0.70 on DelayedBimodal.</p><p>So the fix&rsquo;s mechanism is not environment-specific: it restores the aleatoric channel and re-ranks U wherever it is applied. That part transfers perfectly.</p>" },
+  { t: "The practical ordering flips - the real negative",
+    pills: "DB lagged eq 0.948 10/10 -> DMC 0.638 8/30",
+    body: "<p>On the easy regime (DelayedBimodal, short runs), the <b>combined-fix arm</b> (lagged eq) tops the table at 0.948 (10/10 &ge;0.70). On the harder regime (DMC hopper-hop, 15k steps, drifting critic) it lands <b>below eq</b>: 0.638 vs 0.711, paired delta <b>-0.073 [-0.111, -0.036], 7/30</b> &mdash; the n=2 probe&rsquo;s reversal confirmed at N=30. Plain self-gated <b>ordinary</b> tops the DMC table (0.957, 30/30); both registered eq-position bars fail.</p><p>The paper&rsquo;s second, sharper question: <b>why does a mechanistically-general fix stop paying off under a harder, drifting-critic regime</b>, and is that failure itself explicable (paired-sample/CRN coupling broken by target drift; Osband-style head-collapse)?</p>" },
+  { t: "Where the payoff lands: registered deferral, not a null result",
+    pills: "return floor-bound; gate-off neutral",
+    body: "<p>On DMC all per-arm return means (0.056&ndash;0.201) and medians (0.013&ndash;0.075) are <b>floor-bound on hopper-hop</b> - most seeds return ~0, means are carried by a few non-floor seeds. The registered reading: <b>gating is return-neutral at 15k</b> (gate-off &minus; ordinary +0.025 [-0.057, +0.109], 15/30, CI includes 0), so the u-rank story is the whole measurable payoff at this budget.</p><p>Return is explicitly deferred to the conditional 30k extension. One descriptive-only lead is flagged there: lagged_eq &minus; ordinary return <b>+0.101 [+0.016, +0.199]</b> (15/30) - a hypothesis, not a result.</p>" },
+];
+
+function renderSlides() {
+  const box = $("#slideBody");
+  const title = $("#slideTitle");
+  const pills = $("#slidePills");
+  const n = $("#slideN");
+  const count = $("#slideCount");
+  let i = 0;
+  const show = () => {
+    const s = SLIDES[i];
+    n.textContent = String(i + 1);
+    title.textContent = s.t;
+    pills.innerHTML = s.pills;
+    box.innerHTML = s.body;
+    count.textContent = "slide " + (i + 1) + " of " + SLIDES.length;
+    $("#prevSlide").disabled = i === 0;
+    $("#nextSlide").disabled = i === SLIDES.length - 1;
+  };
+  $("#prevSlide").addEventListener("click", () => { if (i > 0) { i--; show(); } });
+  $("#nextSlide").addEventListener("click", () => { if (i < SLIDES.length - 1) { i++; show(); } });
+  show();
+}
+
+function renderHero(P) {
+  const dmc = byKey(P.dmc30.arms);
+  const db = byKey(P.db10.arms);
+  const cards = [
+    { k: "mechanism transfers (adjudicated, DMC)", big: "30/30", small: "seeds",
+      p: "Equal-weight <b>eq</b> clears the EMA-collapse control: paired eq &minus; EMA = <span class='stat'>+0.788 [+0.736, +0.840]</span>. eq u-rank mean 0.711 vs EMA &minus;0.076." },
+    { k: "the practical ordering flips", big: "0.948 &rarr; 0.638",
+      p: "<b>lagged eq</b> tops DelayedBimodal 10/10 but drops below eq on DMC (paired &minus;0.073, 7/30 reversal). <b>ordinary</b> wins DMC at 0.957, 30/30." },
+    { k: "EMA collapse is reproducible", big: "&minus;0.08", small: "u-rank mean",
+      p: "identified + EMA reweight: 0/30 seeds &ge;0.70 on DMC (0/10 on DB). ordinary &minus; EMA = <span class='stat'>+1.034 [0.988, 1.079], 30/30</span>." },
+  ];
+  $("#heroCards").innerHTML = cards.map((c) =>
+    "<div class='card'><div class='k'>" + c.k + "</div><div class='big'>" + c.big +
+    (c.small ? " <small>" + c.small + "</small>" : "") + "</div><p>" + c.p + "</p></div>").join("");
+}
+function lineChart(el, cfg) {
+  const W = Math.max(560, el.clientWidth || 960);
+  const H = cfg.h || 300;
+  const m = { l: 52, r: 16, t: 14, b: 30 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const xStep = cfg.x;
+  const x0 = xStep[0], x1 = xStep[xStep.length - 1];
+  const X = (v) => m.l + ((v - x0) / (x1 - x0)) * iw;
+  const Y = (v) => m.t + (cfg.log ? (Math.log10(v) - cfg.y0) / (cfg.y1 - cfg.y0) : (cfg.y1 - v) / (cfg.y1 - cfg.y0)) * ih;
+  const px = xStep.map(X);
+  let out = "<svg viewBox='0 0 " + W + " " + H + "' width='100%' height='" + H + "' font-family='Segoe UI, Arial, sans-serif'>";
+  // gridlines
+  const yTicks = cfg.ticks || [0, 0.25, 0.5, 0.75, 1.0];
+  for (const t of yTicks) {
+    if (cfg.log ? t <= cfg.y0 || t > cfg.y1 : t < cfg.y0 || t > cfg.y1) continue;
+    const yy = Y(t);
+    out += "<line x1='" + m.l + "' y1='" + yy + "' x2='" + (m.l + iw) + "' y2='" + yy + "' stroke='#eef2f7'/>";
+    out += "<text x='" + (m.l - 6) + "' y='" + (yy + 4) + "' font-size='11' fill='#94a3b8' text-anchor='end'>" + (cfg.log ? "1e" + t : t) + "</text>";
+  }
+  for (const t of cfg.extraHLines || []) {
+    const yy = Y(t.v);
+    out += "<line x1='" + m.l + "' y1='" + yy + "' x2='" + (m.l + iw) + "' y2='" + yy + "' stroke='#94a3b8' stroke-dasharray='5 4'/>";
+    out += "<text x='" + (m.l + iw - 4) + "' y='" + (yy - 5) + "' font-size='11' fill='#64748b' text-anchor='end'>" + t.label + "</text>";
+  }
+  // x labels
+  px.forEach((xx, i) => {
+    out += "<text x='" + xx + "' y='" + (H - 8) + "' font-size='11' fill='#94a3b8' text-anchor='middle'>" + cfg.xLabels[i] + "</text>";
+  });
+  // series
+  for (const s of cfg.series) {
+    const ys = s.points.map(Y);
+    let d = "";
+    for (let i = 0; i < px.length; i++) d += (i ? " L" : "M") + px[i].toFixed(1) + " " + ys[i].toFixed(1);
+    out += "<path d='" + d + "' fill='none' stroke='" + s.color + "' stroke-width='2.4' stroke-linejoin='round' stroke-linecap='round'/>";
+    for (let i = 0; i < px.length; i++) out += "<circle cx='" + px[i].toFixed(1) + "' cy='" + ys[i].toFixed(1) + "' r='3.4' fill='" + s.color + "'/>";
+  }
+  // legend
+  let lx = m.l + 8;
+  for (const s of cfg.series) {
+    const w = s.label.length * 7.4 + 26;
+    out += "<rect x='" + lx + "' y='2' width='" + w + "' height='16' rx='8' fill='#f8fafc' stroke='#e2e8f0'/>";
+    out += "<circle cx='" + (lx + 11) + "' cy='10' r='4' fill='" + s.color + "'/>";
+    out += "<text x='" + (lx + 20) + "' y='13' font-size='11' fill='#334155'>" + s.label + "</text>";
+    lx += w + 8;
+  }
+  out += "</svg>";
+  el.innerHTML = out;
+}
+
+function renderCurves(P) {
+  const c = P.curves;
+  const stepLabels = c.steps.map((s) => s / 1000 + "k");
+  const armOf = byKey(c.arms);
+  const keysU = ["ordinary", "hybrid", "lagged_hybrid", "identified_eq", "lagged_identified_eq", "identified_hybrid"];
+  const keysG = ["ordinary", "identified_eq", "hybrid", "identified_hybrid"];
+  lineChart($("#curveU"), {
+    x: c.steps, xLabels: stepLabels, y0: -0.2, y1: 1.0, ticks: [-0.2, 0, 0.25, 0.5, 0.75, 1.0],
+    extraHLines: [{ v: 0.70, label: "registered bar 0.70" }],
+    series: keysU.map((k) => ({ label: META_OF(k).display, color: META_OF(k).color, points: armOf[k].u_rank_mean })),
+  });
+  // g ratio on log10 axis: domain 1e-5 .. 1e0
+  lineChart($("#curveG"), {
+    x: c.steps, xLabels: stepLabels, log: true, y0: -5, y1: 0, ticks: [-5, -4, -3, -2, -1, 0],
+    series: keysG.map((k) => ({
+      label: META_OF(k).display, color: META_OF(k).color,
+      points: armOf[k].g_ratio_mean.map((g) => Math.min(Math.max(g, 1e-6), 1.0)),
+    })),
+  });
+}
+
+function renderRank(envKey, P) {
+  const payload = envKey === "dmc" ? P.dmc30 : P.db10;
+  const meta = payload.meta;
+  const arms = payload.arms.slice().sort((a, b) => b.u_mean - a.u_mean);
+  const need = floor(meta.n_seeds);
+  const note = envKey === "dmc"
+    ? "DMC note: lagged eq reversal confirmed at N=30 - paired lagged_eq &minus; eq = <b>-0.073 [-0.111, -0.036], 7/30</b> (on DelayedBimodal lagged eq was ABOVE eq). Mechanism controls still MET (eq &minus; EMA 30/30)."
+    : "DelayedBimodal note: the combined-fix arm (lagged eq) tops the table 10/10 &ge;0.70 - the &ldquo;easy regime&rdquo; result that does not transfer to DMC.";
+  $("#rankNote").innerHTML = note;
+  const row = (a) => {
+    const metaA = META_OF(a.key);
+    const met = a.n_ge_070 >= need;
+    const z = 0.15, scale = 1.15; // value axis -0.15..1.0
+    const zero = (z / scale) * 100;
+    const w = (a.u_mean / scale) * 100;
+    const left = a.u_mean >= 0 ? zero : zero + w;
+    const chip = met ? "<span class='okchip'>MET " + a.n_ge_070 + "/" + meta.n_seeds + "</span>" : "<span class='nochip'>" + a.n_ge_070 + "/" + meta.n_seeds + "</span>";
+    return "<div class='barline'><div class='nm' style='color:" + metaA.color + "'>" + metaA.display +
+      "<small>" + metaA.short + "</small></div>" +
+      "<div class='track'><span class='zline' style='left:" + zero.toFixed(1) + "%'></span>" +
+      (a.u_mean < 0 ? "<span class='fill' style='left:" + left.toFixed(1) + "%;width:" + (-w).toFixed(1) + "%;background:" + metaA.color + "'></span>"
+                    : "<span class='fill' style='left:" + zero.toFixed(1) + "%;width:" + w.toFixed(1) + "%;background:" + metaA.color + "'></span>") +
+      "</div><div class='vl'><b>" + fmt(a.u_mean, 3) + "</b> &middot; med " + fmt(a.u_med, 3) + " &middot; " + chip + "</div></div>";
+  };
+  $("#rankBars").innerHTML = "<div class='tickrow'><span></span><span style='position:relative'><span style='position:absolute;left:13.04%'>0</span><span style='position:absolute;left:73.91%'>0.7 bar</span><span style='position:absolute;right:0'>1.0</span></span><span></span></div>" +
+    arms.map(row).join("");
+}
+
+function renderMetrics(envKey, P) {
+  const payload = envKey === "dmc" ? P.dmc30 : P.db10;
+  const meta = payload.meta;
+  const arms = payload.arms.slice().sort((a, b) => b.u_mean - a.u_mean);
+  const head = "<tr><th>arm</th><th>u_rank mean</th><th>u_rank median</th><th>n &ge; 0.70</th><th>w_rmse median</th><th>next-state MSE</th><th>return mean</th><th>return median</th></tr>";
+  const rows = arms.map((a) => {
+    const m = META_OF(a.key);
+    const met = a.n_ge_070 >= floor(meta.n_seeds);
+    return "<tr class='arm'><td><span class='swatch' style='background:" + m.color + "'></span>" + m.display +
+      (met ? " <span class='okchip'>MET</span>" : "") +
+      "</td><td><b>" + fmt(a.u_mean, 3) + "</b></td><td>" + fmt(a.u_med, 3) + "</td><td>" + a.n_ge_070 + "/" + meta.n_seeds +
+      "</td><td>" + fmtE(a.w_rmse_med) + "</td><td>" + fmt(a.ns_mse_mean, 3) + "</td><td>" + fmt(a.ret_mean, 3) + "</td><td>" + fmt(a.ret_med, 3) + "</td></tr>";
+  }).join("");
+  $("#metricTable").innerHTML = "<table>" + head + rows + "</table><p class='cap'>" +
+    (envKey === "dmc"
+      ? "DMC adjudicated endpoints at 15k (Amendment 2). w_rmse median shown; EMA mean (~1170) is skew-dominated - rank-only claims. Return: descriptive, deferred."
+      : "DelayedBimodal combined-fix, N=10 at 1,800 steps. Different units than DMC - only u_rank and seed counts are cross-environment comparable.") + "</p>";
+}
+
+function renderGloss() {
+  $("#armGloss").innerHTML = Object.keys(ARM_META).map((k) => {
+    const m = ARM_META[k];
+    return "<div class='gloss' style='border-left-color:" + m.color + "'><h4><span class='swatch' style='background:" + m.color + "'></span>" +
+      m.display + " <span style='color:var(--faint);font-weight:400'>- " + m.short + "</span></h4><p>" + m.gloss + "</p></div>";
+  }).join("");
+}
+
+function renderProvenance(P) {
+  const groups = [["DMC 30-seed adjudication", P.dmc30.meta], ["DMC gate-off control", P.dmcCtrl.meta], ["DelayedBimodal combined-fix", P.db10.meta], ["DMC sanity curves (S1)", P.curves.meta]];
+  $("#provenance").innerHTML = "<table><tr><th>group</th><th>source file</th><th>rows</th><th>sha256 (16)</th><th>exact teacher</th><th>generated</th></tr>" +
+    groups.map(([name, meta]) =>
+      "<tr><td style='text-align:left'>" + name + "</td><td style='text-align:left'><code>" + meta.source_file + "</code></td><td>" + meta.source_rows +
+      "</td><td><code>" + meta.source_sha16 + "</code></td><td>" + (meta.exact_teacher_match ? "yes (gap 0.0)" : "n/a") + "</td><td>" + meta.generated + "</td></tr>").join("") +
+    "</table><p class='cap'>Payloads live under <code>visuals/data/</code>; this page embeds the same JSON so it works offline and on GitHub Pages without a server.</p>";
+}
+function wire() {
+  document.querySelectorAll(".chip").forEach((c) =>
+    c.addEventListener("click", () => {
+      const sec = document.getElementById(c.dataset.go);
+      if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
+  const envPair = (segId, fn) => {
+    const seg = $(segId);
+    seg.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", () => {
+        seg.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        fn(b.dataset.env);
+      }));
+  };
+  envPair("#envSeg", (e) => renderRank(e, PAYLOAD));
+  envPair("#metricEnv", (e) => renderMetrics(e, PAYLOAD));
+}
+
+function renderAll(P) {
+  renderHero(P);
+  renderSlides();
+  renderCurves(P);
+  renderRank("dmc", P);
+  renderMetrics("dmc", P);
+  renderGloss();
+  renderProvenance(P);
+  wire();
+}
+
+async function boot() {
+  const tryFetch = async (rel) => {
+    const r = await fetch(rel, { cache: "no-store" });
+    if (!r.ok) throw new Error("http " + r.status);
+    return r.json();
+  };
+  try {
+    const [dmc30, dmcCtrl, db10, curves] = await Promise.all([
+      tryFetch("data/dmc_30seed_final.json"),
+      tryFetch("data/dmc_ctrl_30seed_final.json"),
+      tryFetch("data/db_10seed_final.json"),
+      tryFetch("data/curves.json"),
+    ]);
+    PAYLOAD.dmc30 = dmc30; PAYLOAD.dmcCtrl = dmcCtrl; PAYLOAD.db10 = db10; PAYLOAD.curves = curves;
+  } catch (err) {
+    console.log("payload fetch unavailable (" + err.message + "); using embedded payload (identical at build time).");
+  }
+  renderAll(PAYLOAD);
+}
+boot();
+</script>
+</body>
+</html>

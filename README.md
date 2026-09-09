@@ -18,6 +18,32 @@ model, **not** conformal coverage, and **not** a SOTA control claim.
 
 **Repo:** https://github.com/nisaral/uncertainty-diffusion-world-models
 
+## Visual tour (start here)
+
+- **Interactive verdict explorer** - self-contained page (works offline and
+  on GitHub Pages, no server): [`visuals/v4-explorer.html`](visuals/v4-explorer.html).
+  Click the 90-second story, then V1 geometry, V2 EMA-collapse training curves, V3 ordering flip,
+  per-arm metrics, glossary and caveats. One-time Pages enable (branch `main`, root) puts it at
+  https://nisaral.github.io/uncertainty-diffusion-world-models/visuals/v4-explorer.html
+- The two figures below are the whole empirical story in 60 seconds: the corrected loss's
+  **mechanism transfers** across environments (EMA-collapse control 30/30 on DMC), but its
+  **practical ordering does not** - `lagged eq` tops DelayedBimodal (0.948, 10/10) and drops
+  below `eq` on DMC hopper-hop (0.638, 8/30, paired -0.073), where self-gated `ordinary` wins
+  (0.957, 30/30).
+
+### Why matching one scalar cannot identify uncertainty (V1)
+
+![V1 - the M=1 strip vs the M>=2 ball](visuals/svg/v1-identifiability-skip.svg)
+
+### The transfer-ordering flip (V3)
+
+![V3 - DelayedBimodal vs DMC arm ordering](visuals/svg/v3-cross-env-ordering.svg)
+
+Every number on this page and in the figures is recomputed from the local run files and verified
+against the adjudication docs by [`visuals/scripts/build_payload.js`](visuals/scripts/build_payload.js)
+(`node visuals/scripts/build_payload.js`). Raw multi-tens-of-MB run files stay gitignored under
+`runs/`; the committed payloads are the small JSONs in [`visuals/data/`](visuals/data/).
+
 New here? Start with [`SUMMARY.md`](SUMMARY.md) - the same story in plain
 language. The rest of this README assumes you already know it.
 
@@ -42,9 +68,14 @@ Latest (2026-09-08): normalization attribution + DMC budget verdict
   [`research/RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md`](research/RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md)
 - DMC budget probe (15k, seeds 0-1): baseline u_rank climbs to 0.93/0.86
   (vs 0.45/0.57 at 3.6k) - the 3.6k budget was the confound; Amendment 2
-  sets the 30-seed adjudication at 15k (running). Diagnostic at n=2:
+  set the 30-seed adjudication to 15k (verdict in the next bullet). Diagnostic at n=2:
   `lagged_identified_eq` does NOT top the DMC table (0.63) - the lag-axis
   verdict is open. [`research/RESULTS-DMC-BUDGET-PROBE-2026-09-08.md`](research/RESULTS-DMC-BUDGET-PROBE-2026-09-08.md)
+- DMC 30-seed verdict (2026-09-08): adjudicated at 15k - mechanism controls
+  transfer (EMA collapse 30/30; eq - EMA +0.788), transfer-ordering bars not
+  met (eq - hybrid wash; lagged_identified_eq below eq, -0.073, 7/30);
+  ordinary tops the hopper-hop table (0.957, 30/30). Gate-off return-neutral;
+  returns deferred. [RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md](research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md)
 - Theory: Proposition 8 (level-set geometry; the epsilon-identifiability
   gap) is in the verifier - the M=1 objective's decision-statistic
   uncertainty does not shrink as population risk -> 0, M>=2 identifies with

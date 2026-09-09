@@ -267,3 +267,29 @@ registered budget confound. Amendment 2 is therefore activated as follows:
 The 3,600-step DMC rows (`runs/dmc_payoff_10seed_gpu.json`) are superseded
 for adjudication by this amendment; they remain as the historical record of
 the budget-confound discovery and are never quoted as adjudicated numbers.
+
+---
+
+## Addendum 5 (2026-09-08): 30-seed verdict recorded
+
+The 30-seed x six-arm adjudication at 15k completed
+(`runs/dmc_payoff_30seed_15k_gpu.json`, merged 17:26 IST; gate-off control
+merged 19:30 IST). Full record:
+`research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md`. Summary of the
+registered bars:
+
+- Bar 1 (identified_eq u_rank >= 0.70 on >= 21/30): 15/30 -> NOT MET.
+- Bar 2 (identified_eq beats hybrid on >= 21/30, CI excludes 0): -0.020
+  [-0.067, +0.030], 13/30 -> NOT MET (wash).
+- Mechanism-transfer control (eq - EMA): +0.788 [+0.736, +0.840], 30/30 -> MET.
+- EMA collapse control: mean -0.076, 0/30 >= 0.70; ordinary - EMA 30/30 -> MET.
+
+Decision-tree consequence: the equal-weight mechanism correction transfers its
+control behavior (no collapse; EMA control reproduces) but not its
+DelayedBimodal practical ordering; lagged_identified_eq is below identified_eq
+(-0.073, CI excludes 0), confirming the n=2 reversal at N=30; on hopper-hop at
+15 episodes the plain self-gated ordinary arm is the top u-rank arm and the
+gate-off control is return-neutral (+0.025, CI includes 0, reading rule ii).
+Return endpoints remain deferred to the conditional 30k extension; per the
+mechanism verdict above, that extension is now justified only as a
+positive-control payoff question, not as a transfer-ordering question.
