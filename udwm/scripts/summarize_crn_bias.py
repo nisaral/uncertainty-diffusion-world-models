@@ -126,6 +126,49 @@ def slope_report(rng, rows_by_seed, x_key, y_key, label, n_draws):
     return slopes
 
 
+def per_seed_partial_slope(seed_row, x_key, y_key, ctrl_key="step", min_points=4):
+    """Addendum-1 read (A1.2): per-seed slope of y on x after removing each
+    series' shared monotone trend on ctrl (step rank). Requires >= min_points
+    checkpoints; None when unregressable (e.g. drift constant by construction)."""
+    cps = [cp for cp in (seed_row.get("crn_checkpoints") or [])
+           if x_key in cp and y_key in cp and ctrl_key in cp]
+    cps.sort(key=lambda cp: cp[ctrl_key])
+    if len(cps) < min_points:
+        return None
+    x = np.asarray([cp[x_key] for cp in cps], dtype=float)
+    y = np.asarray([cp[y_key] for cp in cps], dtype=float)
+    ctrl = np.argsort(np.argsort(
+        np.asarray([cp[ctrl_key] for cp in cps], dtype=float))).astype(float)
+    if np.all(x == x[0]):
+        return None
+
+    def resid(z, c):
+        A = np.vstack([c, np.ones_like(c)]).T
+        coef, *_ = np.linalg.lstsq(A, z, rcond=None)
+        return z - A.dot(coef)
+
+    xr, yr = resid(x, ctrl), resid(y, ctrl)
+    if np.all(xr == xr[0]) or np.all(yr == yr[0]):
+        return None
+    return float(np.polyfit(xr, yr, 1)[0])
+
+
+def partial_slope_report(rng, rows_by_seed, label, n_draws):
+    """Pooled per-seed partial slopes (bootstrap 95% CI, house style)."""
+    slopes = {seed: per_seed_partial_slope(row, "drift", "e_u")
+              for seed, row in rows_by_seed.items()}
+    slopes = {s: v for s, v in slopes.items() if v is not None}
+    if len(slopes) < 3:
+        print(f"{label:<52} insufficient per-seed series "
+              f"({len(slopes)}/{len(rows_by_seed)})")
+        return slopes
+    vals = np.asarray(list(slopes.values()), dtype=float)
+    lo, hi = bootstrap_ci(vals, rng, n_draws)
+    print(f"{label:<52} partial slope {vals.mean():+.4f} "
+          f"[{lo:+.4f},{hi:+.4f}]  n_seeds {len(vals)}")
+    return slopes
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--data", default="runs/crn_bias_probe_15k_n10_gpu.json")
@@ -213,6 +256,18 @@ def main(argv=None):
                  "lagged_hybrid (placebo): slope of e_u on drift", args.n_bootstrap)
     slope_report(rng, d["hybrid"], "drift", "e_u",
                  "hybrid (placebo): slope of e_u on drift", args.n_bootstrap)
+
+    print("\n== 1c residualized partial slope (Addendum-1 A1.2 primary read; "
+          "per-seed step trend removed) ==")
+    partial_slope_report(rng, d["lagged_identified_eq"],
+                         "C lagged_eq (norm): e_u on drift | step-rank",
+                         args.n_bootstrap)
+    partial_slope_report(rng, d["lagged_identified_eq_nonorm"],
+                         "D lagged_eq (nonorm): e_u on drift | step-rank",
+                         args.n_bootstrap)
+    partial_slope_report(rng, d["lagged_hybrid"],
+                         "lagged_hybrid (placebo): e_u on drift | step-rank",
+                         args.n_bootstrap)
 
     print("\n== E5 (collapse sanity, not a bar) ==")
     if d["identified_hybrid"]:

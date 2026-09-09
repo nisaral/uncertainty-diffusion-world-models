@@ -202,3 +202,26 @@ underpowered for the eq-vs-lagged_eq contrast by design; n=30 only if the
 decision tree fires). Also still open and untouched: compute-normalized
 re-analysis, MACURA head-to-head baseline, and the conditional 30k return
 extension - none have run.
+
+## Addendum 2026-09-09 (evening): CRN-bias DMC n=10 diagnostic readout - Hypothesis A not supported at n=10
+
+The diagnostic described above has since run and merged (same day; the probe's
+Addendum 1 was pre-committed before the readout). Full numbers and analysis:
+[RESULTS-CRN-BIAS-DMC-2026-09-09.md](RESULTS-CRN-BIAS-DMC-2026-09-09.md).
+Verdict in one line: **Hypothesis A does not confirm on DMC at n=10** - E1 is
+inconclusive in both lagged cells (norm cell +0.018 [-0.588, +0.770], null
+below MDE; nonorm cell +0.661 [+0.018, +0.927], significant in the WRONG
+direction and robust to the one degenerate seed, +0.533 with it dropped); E2
+within-cell lag deltas are positive on DMC (+0.056/+0.071, descriptive only);
+and the section-1c drift-sensitivity (A1.2 residualized read) is present in
+the lagged_hybrid placebo (+2.961, CI excluding 0) about as strongly as in the
+paired norm cell (+5.208) - so pairing-specific drift-bias is not supported
+there either. Controls intact: EMA collapse reproduces (identified_hybrid
+-0.092, 0/10 >= 0.70) and the probe rows reproduce the 30-seed file's
+seeds-0-9 ordering on every shared arm. No `eq_crn` arm is registered; the
+Wu-style correction (E4) is not built; the DMC 30-seed verdict is unchanged.
+The DelayedBimodal companion rows (crn_bias_probe_db_n10.json) stay
+descriptive: same harness, drift ~100x larger (B_hat ~1.2 vs ~0.009), E1
+inconclusive there too. Separate GPU track still in flight: MACURA head-to-head
+and Walker2d gate/budget probe staged on Kaggle 2xT4 (kaggle_macura_walker.sh);
+compute-normalized re-analysis and the 30k return extension remain open.
