@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CRN-bias probe adjudicator (Hypothesis A) - registration 2026-09-09.
 
 Registration: research/CRN-BIAS-PROBE-PREREGISTRATION-2026-09-09.md. Loads the
@@ -65,12 +65,6 @@ def seed_final(rows_arm, key):
         if cp is not None and key in cp:
             out[seed] = float(cp[key])
     return out
-
-
-def paired(rows_a, rows_b, key):
-    seeds = sorted(set(rows_a) & set(rows_b))
-    vals = np.asarray([float(rows_a[s][key]) - float(rows_b[s][key]) for s in seeds])
-    return seeds, vals
 
 
 def bootstrap_ci(stats, rng, n_draws):
@@ -188,7 +182,10 @@ def main(argv=None):
         ("lagged_identified_eq_nonorm", "identified_eq", "no-norm cell"),
         ("lagged_identified_eq", "identified_eq_norm", "norm cell"),
     ):
-        _, deltas = paired(d[lag], d[live], "u_rank_corr")
+        a = seed_final(d[lag], "u_rank_corr")
+        b = seed_final(d[live], "u_rank_corr")
+        common = sorted(set(a) & set(b))
+        deltas = np.asarray([a[s] - b[s] for s in common], dtype=float)
         lo, hi = bootstrap_ci(deltas, rng, args.n_bootstrap)
         wins = int(np.sum(deltas > 0))
         print(f"E2 {cell}: {lag} - {live} u_rank {deltas.mean():+.3f} "

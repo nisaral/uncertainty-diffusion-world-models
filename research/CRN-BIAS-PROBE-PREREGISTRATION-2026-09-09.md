@@ -230,3 +230,79 @@ determines which explanation the paper may assert for the reversal.
 - MACURA authorship correction (2026-09-09 bib fix) applies to any
   field-baseline prose: Frauenknecht, Eisele, Subhasish, Solowjow, Trimpe,
   ICML 2024, PMLR 235:13973-14005.
+
+---
+
+## Addendum 1 (2026-09-09, before the DMC n=10 readout): 1c time-trend confound and E1 power bounds
+
+Context: the DelayedBimodal confirmatory rows are merged (70 rows,
+uns/crn_bias_probe_db_n10.json); the DMC n=10 diagnostic is mid-run and had
+to be partially re-run after the 2026-09-09 shared---out merge race deleted
+seeds 5-9 (fixed by the additive locked merge in probe_crn_bias.py; resume
+workers write disjoint --out files and are unioned at the end). This
+addendum fixes the read of section 1c BEFORE any DMC n=10 row is summarized.
+
+### A1.1 Discovery on the DB rows (descriptive, 5 checkpoints/seed)
+
+Within every seed, the logged drift is a near-monotone decreasing function of
+training step: Spearman(drift, step) is about -0.8 to -0.9 in all 10 seeds of
+every lagged arm, while the estimation error e_u is flat-to-rising with step
+(Spearman(e_u, step) about 0 to +0.9). The registered per-seed OLS slope of
+e_u on drift therefore inherits the training-time trend and is negative in
+every lagged arm - including the lagged_hybrid placebo - without implying a
+drift-driven bias term:
+
+- lagged_identified_eq: raw slope mean -1.33 (7/10 negative, sd 1.39;
+  leave-one-out means all negative; dropping the most extreme seed gives
+  -1.10) - distributed, not outlier-driven.
+- lagged_identified_eq_nonorm: mean -3.53 (10/10 negative, sd 1.71; LOO
+  -3.1 to -3.8).
+- lagged_hybrid (placebo): mean -0.82 (7/10 negative, sd 1.05; LOO all
+  negative). The placebo is NOT cleanly null here, but the raw metric cannot
+  distinguish drift sensitivity from the shared step trend.
+- hybrid (placebo): unregressable (drift ~ 0 by construction), as registered.
+
+Step-residualized association (Spearman of e_u on drift after removing the
+per-seed step rank trend) is weakly POSITIVE in all three arms: means +0.10
+(norm, 7/10 seeds positive), +0.15 (nonorm, 9/10), +0.17 (lagged_hybrid,
+6/10). Five checkpoints per seed keep these descriptive.
+
+### A1.2 Pre-committed correction (fixes the read before DMC rows are read)
+
+The primary section-1c read becomes the per-seed step-residualized partial
+slope pooled across seeds (bootstrap 95% CI, 10^5 draws, rng seed 0),
+reported for both lagged identified cells and the lagged_hybrid placebo; the
+raw OLS slope is reported descriptively only. No registered bar changes
+(E1-E5 read exactly as fixed in section 5); this re-states how the 1c slope
+table is read. Reason: drift's monotone step trend makes the raw slope an
+artifact; residualization removes the shared confound.
+
+### A1.3 E1 power bounds (retroactive; section 6 fixed only the E2 delta)
+
+Detectable |rho| for the E1 within-cell Spearman (alpha 0.05 two-sided,
+power 0.8, Fisher-z approximation, permutation-simulated at n=10):
+
+| n  | MDE |rho| |
+|----|-----------|
+| 10 | 0.785 (sim power 0.75 at that rho) |
+| 30 | 0.492 |
+| 60 | 0.355 |
+| 100| 0.277 |
+
+The DB-observed magnitudes (|rho| 0.345 norm cell, 0.442 nonorm cell) need
+n about 64 and 38 respectively for 80% power. Read: an n=10 E1 correlation
+is informative only for |rho| >= ~0.79; any not-confirmed at n=10 is
+inconclusive by design (consistent with sections 5/8), and a confirmatory E1
+claim needs the n ~ 40-64 scale, not the registered n=30.
+
+Mean-slope MDEs from the observed DB between-seed slope SDs:
+
+| arm | sd(slopes) | MDE n=10 | MDE n=30 | MDE n=60 |
+|-----|-----------|----------|----------|----------|
+| lagged_identified_eq | 1.39 | 1.23 | 0.71 | 0.50 |
+| lagged_identified_eq_nonorm | 1.71 | 1.51 | 0.87 | 0.62 |
+| lagged_hybrid (placebo) | 1.05 | 0.93 | 0.54 | 0.38 |
+
+The DB-observed placebo slope (-0.82) is below its n=10 MDE (0.93):
+underpowered at n=10, detectable at n=30. No placebo-slope claim (zero or
+negative) is supported by the DB n=10 rows.

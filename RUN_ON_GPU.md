@@ -399,3 +399,166 @@ Notes:
   is not bit-identical to CPU and this machine has no dm_control, so DMC
   verdicts are adjudicated on the GPU json (stage3). Label the results doc
   `_gpu` and record `protocol.device`/`gpu_ids`; never merge into a CPU file.
+
+## Remaining GPU queue: MACURA head-to-head + Walker2d staging — Kaggle 2xT4 cells (2026-09-09)
+
+Run these in a Kaggle notebook (**Accelerator: GPU T4x2**, Internet ON) while the
+VM CRN-bias adjudication runs. Everything reuses committed tooling (`dmc_payoff.sh`,
+`run_policy_2x2_split_seeds.py`, and the arm-subset-safe `summarize_dmc_payoff.py`);
+**no new runner is needed**.
+
+Registrations:
+- MACURA: `research/MACURA-BASELINE-PREREGISTRATION-2026-09-09.md`. Bar M1 =
+  paired `macura_gate - ordinary` final_return CI excludes 0 OR `macura_gate -
+  identified_eq` CI excludes 0 (DMC env, 15k per Amendment 2). MACURA produces no
+  w/g split, so `u_rank_corr` is a distillation-sanity read only (parity with
+  ordinary is expected, both use plain distillation).
+- Walker2d: `research/WALKER2D-PAYOFF-PREREGISTRATION-2026-09-09.md` is STAGED:
+  run the gate check + budget-sanity probe now; the full adjudication arm list
+  locks only after the CRN-bias verdict (do not run a full Walker adjudication
+  without an addendum to that doc).
+
+Timing on 2xT4: ~8.5 min/(seed, arm) @15k was measured on an RTX 6000 Ada.
+Expect roughly 2x on T4 (~17-20 min/row) and more for `macura_gate` (its u_KL
+kernel-plugin gate is the expensive knob). A 30-seed x 3-arm MACURA run is ~90
+rows — split it into halves (cells below) so each fits under Kaggle's per-cell
+execution cap, then union + adjudicate.
+
+### Cell 0 — setup (run first)
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working
+[ -d uncertainty-diffusion-world-models ] || git clone https://github.com/nisaral/uncertainty-diffusion-world-models
+cd uncertainty-diffusion-world-models
+git pull --ff-only
+export PYTHONPATH=$PWD
+pip install -q --no-input gymnasium numpy dm_control mujoco shimmy pyyaml tqdm
+python -c "import torch; print('cuda', torch.cuda.is_available(), torch.cuda.device_count())"
+nvidia-smi --query-gpu=index,name,memory.total,utilization.gpu --format=csv
+```
+
+### MACURA 1 — registered gate check + budget-sanity probe (seeds 0-1, 15k)
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=$PWD
+# gate pilot (ordinary, seeds 0-1) + teacher g*/w* readout
+CONFIG=configs/dmc_hopper_probe.yaml STEPS=15000 GATE_SEEDS="0 1" \
+  PILOT=runs/dmc_macura_gate_pilot.json GPU_IDS=0,1 bash dmc_payoff.sh stage1
+# budget-sanity probe: 3 registered MACURA arms on the same 2 seeds
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --config configs/dmc_hopper_probe.yaml \
+  --seeds 0 1 \
+  --variants ordinary identified_eq macura_gate \
+  --steps 15000 --jobs 2 --threads 2 --gpu-ids 0,1 \
+  --out runs/dmc_macura_probe_2seed_15k_gpu.json
+python -m udwm.scripts.summarize_dmc_payoff \
+  --data runs/dmc_macura_probe_2seed_15k_gpu.json --no-ctrl
+```
+Read: (a) gate regime line from stage1; (b) per-arm u_rank floor (should sit in
+the 0.7-0.96 band ordinary already established at 15k — if `macura_gate` u_rank
+is far from ordinary's, that is an implementation-consistency flag); (c) the
+`macura_gate` final-return contrasts print at the bottom of the summary
+(descriptive at n=2).
+
+### MACURA 2 — 30-seed adjudication (run as two halves; resume-safe)
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=$PWD
+# Half A: seeds 0-14. Half B: seeds 15-29 with OUT=..._b.json (edit 2 lines).
+# Re-running a half RESUMES completed per-seed partials after a drop.
+SEEDS="${SEEDS:-0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29}"
+OUT="${OUT:-runs/dmc_macura_30seed_15k_gpu_a.json}"
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --config configs/dmc_hopper_probe.yaml \
+  --seeds $SEEDS \
+  --variants ordinary identified_eq macura_gate \
+  --steps 15000 --jobs 2 --threads 2 --gpu-ids 0,1 \
+  --out "$OUT"
+```
+Example: half A = `SEEDS="0 1 ... 14" OUT=runs/dmc_macura_30seed_15k_gpu_a.json`,
+half B = `SEEDS="15 16 ... 29" OUT=runs/dmc_macura_30seed_15k_gpu_b.json`.
+
+### MACURA 3 — union the halves and adjudicate
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=$PWD
+python - <<'PY'
+import json
+a = json.load(open("runs/dmc_macura_30seed_15k_gpu_a.json"))
+b = json.load(open("runs/dmc_macura_30seed_15k_gpu_b.json"))
+sa = {int(r["seed"]) for r in a["rows"]}; sb = {int(r["seed"]) for r in b["rows"]}
+assert sa.isdisjoint(sb), "seed overlap between halves"
+rows = sorted(a["rows"] + b["rows"], key=lambda r: (int(r["seed"]), r["variant"]))
+out = {"protocol": {"config": a["protocol"]["config"],
+                    "seeds": sorted(sa | sb),
+                    "steps": a["protocol"]["steps"],
+                    "variants": a["protocol"]["variants"],
+                    "driver": "union of Kaggle halves a+b",
+                    "device": a["protocol"].get("device"),
+                    "gpu_ids": a["protocol"].get("gpu_ids")},
+       "rows": rows,
+       "teacher_pairing": {str(s): a["teacher_pairing"].get(str(s), b["teacher_pairing"].get(str(s)))
+                           for s in sorted(sa | sb)}}
+json.dump(out, open("runs/dmc_macura_30seed_15k_gpu.json", "w"), indent=1)
+print("merged rows", len(rows), "seeds", len(sa | sb))
+PY
+python -m udwm.scripts.summarize_dmc_payoff \
+  --data runs/dmc_macura_30seed_15k_gpu.json --no-ctrl
+```
+Read: the bottom `MACURA baseline contrasts` block is the registered readout.
+Bars printed above it are the DMC Hopper bars reproduced on the same seeds
+(ordinary/eq rows rerun in the same file); only the MACURA block adjudicates M1.
+
+### Walker2d 1 — gate check at 15k (ordinary, seeds 0-1)
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=$PWD
+CONFIG=configs/dmc_walker2d_distill.yaml STEPS=15000 GATE_SEEDS="0 1" \
+  PILOT=runs/walker_gate_pilot.json GPU_IDS=0,1 bash dmc_payoff.sh stage1
+```
+Record the Walker2d g*/w* regime (Hopper's median 14,292 aleatoric-dominated
+regime is NOT transferable).
+
+### Walker2d 2 — budget-sanity probe (ordinary / lagged_hybrid / identified_eq)
+```bash
+%%bash
+set -euo pipefail
+cd /kaggle/working/uncertainty-diffusion-world-models
+export PYTHONPATH=$PWD
+python -m udwm.scripts.run_policy_2x2_split_seeds \
+  --config configs/dmc_walker2d_distill.yaml \
+  --seeds 0 1 \
+  --variants ordinary lagged_hybrid identified_eq \
+  --steps 15000 --jobs 2 --threads 2 --gpu-ids 0,1 \
+  --out runs/walker2d_budget_probe_gpu.json
+python -m udwm.scripts.summarize_walker2d_payoff \
+  --data runs/walker2d_budget_probe_gpu.json
+python -m udwm.scripts.print_eval_history --data runs/walker2d_budget_probe_gpu.json
+```
+Decision rule (staging prereg section 4.2): 15k is registered for Walker2d iff
+ordinary u_rank clears the same ~0.70 operating-point bar Hopper required at
+15k; otherwise the budget is amended (probe first, amendment second). Do NOT
+start a full Walker adjudication until the arm list is locked by the CRN-bias
+verdict.
+
+### Download — pull the artifacts
+```bash
+%%bash
+cd /kaggle/working/uncertainty-diffusion-world-models
+tar czf /kaggle/working/dmc_remaining_gpu_results.tgz \
+  runs/dmc_macura_*.json runs/walker2d_*.json runs/walker_gate_pilot.json 2>/dev/null || true
+ls -la /kaggle/working/*.tgz
+```
+Download the `.tgz` from the notebook Output panel (file icon) and record the
+verdicts in `research/RESULTS-*.md` with the `_gpu` label and
+`protocol.device`/`gpu_ids` from the JSON (house rule: never merge GPU rows into
+a CPU file; keep `_gpu` files separate).

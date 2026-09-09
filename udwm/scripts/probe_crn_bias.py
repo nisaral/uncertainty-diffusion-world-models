@@ -46,7 +46,11 @@ Output: one canonical JSON per run, rows = one record per (seed, variant):
 
 Resume/parallel: per-(seed, variant) partial files are written atomically;
 launch several processes with disjoint --seeds/--variants against the same
---out and finish with --merge (no git or shared-state needed).
+--out. Merging is additive and lock-serialized (read-existing -> union ->
+atomic rename) with a per-invocation seeds x arms completeness check, so
+concurrent finishers cannot overwrite one another (2026-09-09 shared-out
+data-loss race fixed). Use --keep-partials on long compute workers and/or
+a final --merge finisher pass.
 
 Examples (smoke, CPU, DelayedBimodal):
     python -m udwm.scripts.probe_crn_bias --config configs/delayed_bimodal_distill.yaml \
@@ -64,6 +68,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -356,6 +361,87 @@ def build_pairing(rows):
     return pairing
 
 
+
+def _read_row_map(out):
+    """Existing canonical rows as {(seed, variant): row}; {} if absent/broken."""
+    if not out.exists():
+        return {}
+    try:
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        return {(int(r["seed"]), r["variant"]): r for r in payload.get("rows", [])}
+    except (ValueError, KeyError, TypeError):
+        return {}
+
+
+def _protocol_mismatch(out, protocol):
+    """True when out already holds rows from a different protocol (refuse union)."""
+    try:
+        old = json.loads(out.read_text(encoding="utf-8")).get("protocol", {})
+    except ValueError:
+        return True
+    keys = ("config", "steps", "probe_states", "probe_m", "registration")
+    return any(old.get(k) != protocol.get(k) for k in keys)
+
+
+def merge_out_additive(out, added_rows, expected, protocol, variants, *,
+                       keep_partials=False, delete_partials=True):
+    """Union added rows into the canonical --out under an advisory lock.
+
+    Reads any rows already in out (other workers / earlier merges), unions this
+    invocation's rows (this invocation wins on duplicates), validates that every
+    requested (seed, variant) is present, writes atomically (tmp + rename), and
+    only then removes the partials for the requested seeds. Concurrent workers
+    sharing one --out serialize on the lock, so the last finisher sees the union
+    of all workers' rows instead of overwriting them. A missing row fails loudly
+    and leaves both the file and the partials untouched for resume.
+    """
+    added = {(int(r["seed"]), r["variant"]): r for r in added_rows}
+    lock_fd = None
+    try:
+        import fcntl  # POSIX hosts (the probe runs on Linux VMs)
+        lock_fd = open(out.with_name(out.name + ".lock"), "a+")
+        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
+    except (ImportError, OSError):
+        pass  # non-POSIX fallback: single-writer assumption only
+    try:
+        merged = _read_row_map(out)
+        if merged and _protocol_mismatch(out, protocol):
+            print("[probe] FATAL: existing rows in {} are from a different "
+                  "protocol (config/steps/probe settings); refusing to union. "
+                  "Use a fresh --out for a different study/budget.".format(out.name))
+            return False
+        merged.update(added)
+        missing = sorted(expected - set(merged))
+        rows = [merged[k] for k in sorted(merged)]
+        if missing:
+            shown = ", ".join("s{}:{}".format(s, v) for s, v in missing[:8])
+            more = " ..." if len(missing) > 8 else ""
+            print("[probe] FATAL: expected {} (seed, variant) rows for requested "
+                  "seeds x arms, found {} in file; {} missing: {}{}".format(
+                      len(expected), len(rows), len(missing), shown, more))
+            return False
+        payload = {"protocol": protocol, "rows": rows,
+                   "teacher_pairing": build_pairing(rows)}
+        tmp = out.with_name(out.name + ".tmp")
+        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(tmp, out)
+        print("[probe] merged {} rows -> {} (expected {} for requested seeds x arms)"
+              .format(len(rows), out, len(expected)))
+        if delete_partials and not keep_partials:
+            for seed in sorted({int(s) for s, _ in expected}):
+                for variant in variants:
+                    partial_path(out, seed, variant).unlink(missing_ok=True)
+            print("[probe] removed partial files (--keep-partials to retain)")
+        return True
+    finally:
+        if lock_fd is not None:
+            try:
+                import fcntl
+                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+            lock_fd.close()
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--config", default="configs/delayed_bimodal_distill.yaml")
@@ -409,35 +495,33 @@ def main(argv=None):
                 rows.append(run_one(args, base, seed, variant, out,
                                     prepared_buffer, prepared_teacher))
 
-    if not rows:
+    if not rows and not out.exists():
         raise SystemExit("no rows produced")
-    # dedupe: last wins per (seed, variant)
-    dedup = {}
+    # dedupe: last wins per (seed, variant) within this invocation
+    added = {}
     for r in rows:
-        dedup[(int(r["seed"]), r["variant"])] = r
-    rows = [dedup[k] for k in sorted(dedup)]
-    payload = {
-        "protocol": {
-            "config": args.config,
-            "seeds": list(args.seeds),
-            "steps": int(args.steps),
-            "variants": list(args.variants),
-            "probe_states": int(args.probe_states),
-            "probe_m": int(args.probe_m),
-            "registration": "research/CRN-BIAS-PROBE-PREREGISTRATION-2026-09-09.md",
-            "device": args.device if args.device else base.get("device", "cpu"),
-            "driver": "probe_crn_bias.py (per seed x variant partials, merged)",
-        },
-        "rows": rows,
-        "teacher_pairing": build_pairing(rows),
-    }
-    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"[probe] merged {len(rows)} rows -> {out}")
-    if not args.keep_partials and not args.merge:
-        for seed in args.seeds:
-            for variant in args.variants:
-                partial_path(out, seed, variant).unlink(missing_ok=True)
-        print("[probe] removed partial files (--keep-partials to retain)")
+        added[(int(r["seed"]), r["variant"])] = r
+    added_rows = [added[k] for k in sorted(added)]
+    expected = {(int(s), v) for s in args.seeds for v in args.variants}
+    protocol = {
+        "config": args.config,
+        "seeds": list(args.seeds),
+        "steps": int(args.steps),
+        "variants": list(args.variants),
+        "probe_states": int(args.probe_states),
+        "probe_m": int(args.probe_m),
+        "registration": "research/CRN-BIAS-PROBE-PREREGISTRATION-2026-09-09.md",
+        "device": args.device if args.device else base.get("device", "cpu"),
+        "driver": "probe_crn_bias.py (per seed x variant partials, additive locked merge)",
+    },
+    ok = merge_out_additive(
+        out, added_rows, expected, protocol, args.variants,
+        keep_partials=args.keep_partials,
+        delete_partials=not args.merge,  # --merge is a finisher: leaves partials
+    )
+    if not ok:
+        raise SystemExit("[probe] FATAL: canonical output incomplete; partials "
+                         "retained for resume (re-run the same command to finish)")
 
 
 if __name__ == "__main__":

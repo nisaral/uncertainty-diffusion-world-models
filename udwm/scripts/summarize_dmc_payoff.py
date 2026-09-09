@@ -62,6 +62,9 @@ def bootstrap_ci(deltas, rng, n_draws):
 
 def report_pair(rng, rows_a, rows_b, key, n_draws, label):
     _, deltas = paired_delta(rows_a, rows_b, key)
+    if deltas.size == 0:
+        print(f"{label:<46} arm(s) absent from file - skipped")
+        return float("nan"), float("nan"), float("nan"), 0
     lo, hi = bootstrap_ci(deltas, rng, n_draws)
     wins = int(np.sum(deltas > 0))
     print(f"{label:<46} {deltas.mean():+.3f} [{lo:+.3f},{hi:+.3f}]  wins {wins}/{len(deltas)}")
@@ -74,12 +77,24 @@ def main(argv=None):
     p.add_argument("--ctrl", default="runs/dmc_payoff_30seed_15k_gpu_ctrl.json")
     p.add_argument("--n-bootstrap", type=int, default=100000)
     p.add_argument("--rng-seed", type=int, default=0)
+    p.add_argument("--no-ctrl", action="store_true",
+                   help="skip the gate-off control block (arm-subset files)")
+    p.add_argument("--no-bars", action="store_true",
+                   help="skip the DMC-registered bar block (non-DMC files)")
     args = p.parse_args(argv)
 
     rows = load_rows((ROOT / args.data).resolve())
     rng = np.random.default_rng(args.rng_seed)
     d = {a: by_seed(rows, a) for a in ARMS}
+    for _rv in sorted({r["variant"] for r in rows}):
+        d.setdefault(_rv, by_seed(rows, _rv))
     seeds = sorted(d["ordinary"])
+    if not seeds:
+        seeds = sorted({int(r["seed"]) for r in rows})
+        print(f"NOTE: no ordinary rows; arm-subset mode, arms="
+              f"{sorted({r['variant'] for r in rows})}")
+    if not seeds:
+        raise SystemExit("file has no rows to summarize")
     print(f"rows={len(rows)} seeds={len(seeds)} range=[{seeds[0]},{seeds[-1]}]")
 
     print(f"\n== per-arm final eval (n={len(seeds)}) ==")
@@ -87,8 +102,14 @@ def main(argv=None):
         f"{'arm':<22}{'u_rank_mean':>11}{'u_rank_med':>11}{'n>=0.70':>9}"
         f"{'w_rmse_med':>13}{'ns_mse':>10}{'ret_mean':>10}{'ret_med':>10}"
     )
-    for a in ARMS:
+    table_arms = list(ARMS) + sorted(
+        {r["variant"] for r in rows if r["variant"] not in ARMS}
+    )
+    for a in table_arms:
         rs = list(d[a].values())
+        if not rs:
+            print(f"{a:<22}  (no rows in file - skipped)")
+            continue
         ur = np.asarray([r["u_rank_corr"] for r in rs])
         print(
             f"{a:<22}{ur.mean():>11.3f}{float(np.median(ur)):>11.3f}"
@@ -100,17 +121,32 @@ def main(argv=None):
         )
 
     print("\n== registered bars / contrasts (paired u_rank_corr) ==")
-    eq, hy = d["identified_eq"], d["hybrid"]
-    n_ge = int(np.sum([r["u_rank_corr"] >= U_RANK_BAR for r in eq.values()]))
-    verdict1 = "MET" if n_ge >= SEED_BAR else "NOT MET"
-    print(f"bar 1: identified_eq u_rank >= {U_RANK_BAR} on {n_ge}/{len(seeds)} "
-          f"seeds (need >= {SEED_BAR}) -> {verdict1}")
-    _, lo, hi, w = report_pair(
-        rng, eq, hy, "u_rank_corr", args.n_bootstrap,
-        "bar 2: eq - hybrid (need >=21/30, CI excl 0)",
-    )
-    ok = (w >= SEED_BAR) and not (lo <= 0 <= hi)
-    print(f"      -> {'MET' if ok else 'NOT MET'}")
+    if len(seeds) != 30:
+        print(f"NOTE: bars registered for the DMC 30-seed study; this file has "
+              f"n={len(seeds)} -> bar verdicts NOT applicable (read contrasts only).")
+    if args.no_bars:
+        print("(skipped: --no-bars)")
+        eq, hy = {}, {}
+    else:
+        eq, hy = d["identified_eq"], d["hybrid"]
+    if not eq:
+        n_ge = 0
+        verdict1 = "n/a (identified_eq absent)"
+        print(f"bar 1: identified_eq u_rank >= {U_RANK_BAR} -> {verdict1}")
+    else:
+        n_ge = int(np.sum([r["u_rank_corr"] >= U_RANK_BAR for r in eq.values()]))
+        verdict1 = "MET" if n_ge >= SEED_BAR else "NOT MET"
+        print(f"bar 1: identified_eq u_rank >= {U_RANK_BAR} on {n_ge}/{len(seeds)} "
+              f"seeds (need >= {SEED_BAR}) -> {verdict1}")
+    if not eq or not hy:
+        print("bar 2: eq - hybrid -> n/a (one or both arms absent from file)")
+    else:
+        _, lo, hi, w = report_pair(
+            rng, eq, hy, "u_rank_corr", args.n_bootstrap,
+            "bar 2: eq - hybrid (need >=21/30, CI excl 0)",
+        )
+        ok = (w >= SEED_BAR) and not (lo <= 0 <= hi)
+        print(f"      -> {'MET' if ok else 'NOT MET'}")
     for a, b, label in [
         ("identified_eq", "ordinary", "eq - ordinary (transfer gap)"),
         ("identified_eq", "lagged_hybrid", "eq - lagged_hybrid (transfer gap)"),
@@ -132,7 +168,7 @@ def main(argv=None):
         report_pair(rng, d[a], d["ordinary"], "final_return",
                     args.n_bootstrap, f"{a} - ordinary")
 
-    if args.ctrl:
+    if args.ctrl and not args.no_ctrl:
         ctrl_path = (ROOT / args.ctrl).resolve()
         if ctrl_path.exists():
             ctrl = by_seed(load_rows(ctrl_path), "ordinary_gate_off")
