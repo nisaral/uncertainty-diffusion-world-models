@@ -225,3 +225,29 @@ descriptive: same harness, drift ~100x larger (B_hat ~1.2 vs ~0.009), E1
 inconclusive there too. Separate GPU track still in flight: MACURA head-to-head
 and Walker2d gate/budget probe staged on Kaggle 2xT4 (kaggle_macura_walker.sh);
 compute-normalized re-analysis and the 30k return extension remain open.
+
+## Addendum 2026-09-10: grand status ledger + first MACURA/Walker2d GPU rows (Kaggle partials)
+
+Exact full status for every study to date is now in one place:
+[GRAND-STATUS-2026-09-10.md](GRAND-STATUS-2026-09-10.md) (per-study ledger,
+claims safe to assert, next queue, integrity notes). New this pass - the
+stopped Kaggle session's rows were downloaded to `runs_local/` and read as
+PARTIAL/DIAGNOSTIC only (no bars evaluated):
+
+- MACURA DMC head-to-head is PARTIAL at n=4 of 30 (seeds 0-3 complete, three
+  arms; seeds 4-5 have ordinary only). u-rank at parity with ordinary
+  (macura_gate - ordinary -0.003, CI includes 0) and above identified_eq
+  (+0.216, 4/4); returns floor-bound at 15k on hopper-hop, so the registered
+  payoff endpoints are not readable yet. MACURA gate is active (stopped_frac
+  0.158 vs ordinary 0.096 at final). Full 30-seed read still needed
+  (~9-12 h on 2xT4, resume-safe).
+- Walker2d staging: gate pilot aleatoric-dominated (median g*/w* 5,860; w*
+  nonzero on seed 0 - structurally different from hopper), returns usable and
+  NOT floor-bound (ordinary 32.65 vs lagged_hybrid 27.55 at n=2) - first
+  positive signal for the Hypothesis-B premise. But 15k is not an adequate
+  Walker operating point (u-rank 0.46/0.25, 0/2 >= 0.70, non-monotone ends);
+  identified_eq arm unfinished. Higher-budget staging decision required
+  before any arm comparison.
+- Unchanged and still open: CRN Hypothesis A not supported at n=10, no
+  eq_crn/E4; compute-normalized re-analysis + effect-size report staged but
+  not run; 30k return extension gated; GitHub Pages not yet enabled.
