@@ -6,7 +6,7 @@ NEVER re-adjudicates the DMC payoff bars or the DelayedBimodal transfer bars;
 it tests the explanation proposed for the lag-axis asymmetry that the DMC
 30-seed verdict left standing. Per project discipline: this document fixes the
 endpoint set, direction, and adjudication rule first; the harness
-(`udwm/scripts/run_crn_bias_probe.py`) is implemented after registration and
+(`udwm/scripts/probe_crn_bias.py`; implemented 2026-09-09) is implemented after registration and
 before any row is read.
 
 ## 1. The anomaly this probe targets
@@ -183,7 +183,7 @@ registered n=30 extension.
 
 | env | budget | arms | seeds | runner/config | expected file |
 |---|---|---|---|---|---|
-| DMC hopper-hop | 15,000 steps, eval_freq 3000 | A,B,C,D + hybrid, lagged_hybrid, identified_hybrid (7 arms) | 0-9 | `udwm/scripts/run_crn_bias_probe.py` (new, post-registration), config base `configs/dmc_hopper_probe.yaml` | `runs/crn_bias_probe_15k_n10_gpu.json` |
+| DMC hopper-hop | 15,000 steps, eval_freq 3000 | A,B,C,D + hybrid, lagged_hybrid, identified_hybrid (7 arms) | 0-9 | `udwm/scripts/probe_crn_bias.py` (new, post-registration), config base `configs/dmc_hopper_probe.yaml` | `runs/crn_bias_probe_15k_n10_gpu.json` |
 | DelayedBimodal (confirmatory, cheap) | 1,800 steps | same 7 arms | 0-9 | same harness, DelayedBimodal config | `runs/crn_bias_probe_db_n10.json` |
 
 Estimated wall cost on the company VM (2 polite workers): ~5-7 h for the DMC

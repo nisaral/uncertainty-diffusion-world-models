@@ -146,6 +146,24 @@ def main(argv=None):
             report_pair(rng, ctrl, o, "final_return", args.n_bootstrap,
                         "gate_off - ordinary final_return")
 
+    # MACURA field baseline (registered 2026-09-09): guarded extra contrasts,
+    # only printed when the run file actually carries macura_gate rows. MACURA
+    # (ICML 2024) produces no w/g split, so the fair endpoints are downstream
+    # return and rollout-gating quality; u_rank_corr is a distillation sanity
+    # read only (macura_gate uses ordinary distillation, so parity is expected).
+    macura_rows = [r for r in rows if r["variant"] == "macura_gate"]
+    if macura_rows:
+        mg = by_seed(macura_rows, "macura_gate")
+        print("\n== MACURA baseline contrasts (macura_gate) ==")
+        report_pair(rng, mg, d["ordinary"], "final_return", args.n_bootstrap,
+                    "macura_gate - ordinary final_return")
+        report_pair(rng, mg, d["identified_eq"], "final_return", args.n_bootstrap,
+                    "macura_gate - identified_eq final_return")
+        report_pair(rng, mg, d["ordinary"], "u_rank_corr", args.n_bootstrap,
+                    "macura_gate - ordinary u_rank (distill sanity)")
+        report_pair(rng, mg, d["identified_eq"], "u_rank_corr", args.n_bootstrap,
+                    "macura_gate - identified_eq u_rank")
+
 
 if __name__ == "__main__":
     main()

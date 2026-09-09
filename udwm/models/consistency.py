@@ -88,6 +88,33 @@ class ConsistencyStudent(nn.Module):
         return obs + delta, r
 
 
+# Optional per-forward CRN-bias probe context, set by
+# udwm/scripts/probe_crn_bias.py (measurement only; training math is
+# untouched when this stays None).
+CRN_PROBE = None
+
+
+def _crn_record(t_value, s_value, m, b):
+    """Record the paired teacher/student value evaluations of one forward.
+
+    Both evaluations happen inside this forward with the SAME frozen
+    reference critic (the closure ``value_fn``), so the within-forward pairing
+    gap is structurally zero for every arm; what differs between arms is the
+    reference itself (live Q_t vs polyak target Q_{t-k}). Returns a plain
+    dict for the module-level CRN_PROBE context.
+    """
+    with torch.no_grad():
+        return {
+            "q_teacher_mean": float(t_value.detach().mean()),
+            "q_student_mean": float(s_value.detach().mean()),
+            "q_teacher_absmean": float(t_value.detach().abs().mean()),
+            "q_student_absmean": float(s_value.detach().abs().mean()),
+            "gap_critic_updates": 0.0,
+            "n_states": int(b),
+            "m_latents": int(m),
+        }
+
+
 def distill_loss(
     student: ConsistencyStudent,
     teacher: DiffusionDynamicsEnsemble,
@@ -563,6 +590,8 @@ def _identified_decision_corruption_loss(
 
     t_value = torch.stack(t_vals, dim=1)                      # [N,M,B,1]
     s_value = torch.stack(s_vals, dim=1)
+    if CRN_PROBE is not None:
+        CRN_PROBE["last"] = _crn_record(t_value, s_value, m, b)
     if normalize_values:
         loc = t_value.mean().detach()
         scale = t_value.std(unbiased=False).detach().clamp_min(1e-6)
@@ -694,6 +723,8 @@ def _identified_schedule_loss(
 
     t_value = torch.stack(t_vals, dim=1)                      # [N,M,B,1]
     s_value = torch.stack(s_vals, dim=1)
+    if CRN_PROBE is not None:
+        CRN_PROBE["last"] = _crn_record(t_value, s_value, m, b)
     if normalize_values:
         loc = t_value.mean().detach()
         scale = t_value.std(unbiased=False).detach().clamp_min(1e-6)

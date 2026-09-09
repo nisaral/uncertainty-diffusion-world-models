@@ -355,6 +355,20 @@ class MBPOTrainer:
                     a,
                     m_samples=int(self.u_gate_cfg.get("one_step_m_samples", 4)),
                 )
+            elif score_source == "ukl":
+                # MACURA-style gating signal (ICML 2024, arXiv:2405.19014,
+                # Eq. 4): member-KL uncertainty u_KL (sum over members of
+                # KL(member || equal-weight mixture)) instead of the learned
+                # UBE u. Same score_fn slot as one_step_state; the
+                # macura_gate arm sets this. See macura_baseline.py for the
+                # kernel-plugin estimator used for implicit diffusion members.
+                from udwm.uncertainty.macura_baseline import ukl_disagreement
+                score_fn = lambda o, a: ukl_disagreement(
+                    self.world_model,
+                    o,
+                    a,
+                    m_samples=int(self.u_gate_cfg.get("ukl_m_samples", 8)),
+                )
             roll = u_gated_rollout(
                 self.world_model,
                 policy_fn,

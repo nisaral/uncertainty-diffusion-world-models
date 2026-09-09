@@ -179,6 +179,26 @@ VARIANTS = {
     # "the preserved u object helps gating" from "gating itself helps or
     # hurts" while keeping the model arm identical to `ordinary`. Root-level
     # overrides (u_gate) are applied by make_cfg via the special `_root` key.
+        # MACURA field baseline (registered 2026-09-09,
+    # research/MACURA-BASELINE-PREREGISTRATION-2026-09-09.md). Identical to
+    # `ordinary` distillation (plain member matching, no decision terms);
+    # the ONLY difference from ordinary is the rollout gate signal: MACURA
+    # member-KL uncertainty u_KL (Eq. 4 of arXiv:2405.19014;
+    # macura_baseline.ukl_disagreement, kernel-plugin over the members' MC
+    # draws) in the score_fn slot instead of the learned UBE u. Reuses the
+    # same teacher ensemble + student + rollout machinery; a new gating rule,
+    # not a new model. Endpoints (u-rank-equivalent proxy + return + gate
+    # diagnostics) are registered in the doc; MACURA produces no w/g split.
+    "macura_gate": {
+        "distill_decision_weight": 0.0,
+        "distill_value_variance_weight": 0.0,
+        "distill_hybrid_state_weight": 0.0,
+        "distill_hybrid_pairwise_weight": 0.0,
+        "distill_geometry_weight": 0.0,
+        "distill_pairwise_weight": 0.0,
+        "_root": {"u_gate": {"mode": "both", "score": "ukl",
+                             "ukl_m_samples": 8}},
+    },
     "ordinary_gate_off": {
         "distill_decision_weight": 0.0,
         "distill_value_variance_weight": 0.0,
