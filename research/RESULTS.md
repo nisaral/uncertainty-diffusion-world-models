@@ -186,3 +186,19 @@ lag axis is loss-family-dependent (lagged_hybrid - hybrid +0.106, 22/30;
 lagged_eq - eq -0.073). Gate-off control return-neutral at 15k (+0.025, CI
 includes 0); return thread deferred per registration.
 [RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md](RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md)
+
+## Addendum 2026-09-09: next registered probe (Hypothesis A, CRN bias) - registered, NOT yet run
+
+No experiment has run since the DMC 30-seed verdict. The next registered
+probe - the CRN-bias / value-reference-consistency diagnostic that would
+explain the lag-axis asymmetry (lagged_hybrid +0.106 vs lagged_eq -0.073 on
+DMC) - is now preregistered, before any harness code or rows:
+[CRN-BIAS-PROBE-PREREGISTRATION-2026-09-09.md](CRN-BIAS-PROBE-PREREGISTRATION-2026-09-09.md).
+It runs the identified-family {live, lagged} x {norm, no-norm} 2x2 plus
+hybrid-family controls and the EMA collapse arm, logs critic drift rate,
+paired-evaluation gap, and a Wu-et-al-style induced-bias proxy, and commits
+power/MDE numbers computed from the DMC 30-seed SDs (n=10 diagnostic is
+underpowered for the eq-vs-lagged_eq contrast by design; n=30 only if the
+decision tree fires). Also still open and untouched: compute-normalized
+re-analysis, MACURA head-to-head baseline, and the conditional 30k return
+extension - none have run.
