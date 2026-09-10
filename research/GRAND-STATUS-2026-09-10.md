@@ -200,8 +200,8 @@ Checkpoint u-rank means (3k/6k/9k/12k/15k, n=2): ordinary 0.014 / 0.342 /
 
 | Item | Status | Note |
 |---|---|---|
-| Compute-normalized re-analysis | STAGED | Methods note + `reanalyze_compute_normalized.py` ready (zero GPU; re-indexes existing rows at fixed teacher-sample compute); no reported read yet |
-| Effect sizes / power (5a) | PARTLY DONE | MDE/power tables landed in CRN Addendum A1.3 (pre-run); `effect_size_report.py` staged, not yet run on the adjudicated files |
+| Compute-normalized re-analysis | DONE (2026-09-10, local, zero GPU) | Cost multipliers derived from `consistency.py` (ordinary 1x / hybrid 5x / identified 10x teacher samples per epoch); re-indexed against teacher-sample spend the ordering does not change and eq's deficit does not narrow (DMC `ordinary` 0.954@1776u vs `eq` 0.712@17760u; eq ~13x less compute-efficient, 0.040 vs 0.537 u_rank/1000u). The fixed-compute head-to-head is NOT readable at this protocol (common teacher-sample domain empty), and the note says so instead of extrapolating. `RESULTS-COMPUTE-NORMALIZED-AND-EFFECT-SIZE-2026-09-10` |
+| Effect sizes / power (5a) | DONE (2026-09-10, local, zero GPU) | MDE/power tables landed in CRN Addendum A1.3 (pre-run); `effect_size_report.py` now run on the DMC 30-seed file: `eq - ordinary` d_z = **-2.63** (0/30), `eq - hybrid` d_z = -0.14 (13/30, standardized wash), `ordinary - EMA` d_z = **+8.01** 30/30, `eq - EMA` +5.33 30/30; retroactive CRN-E1 MDE note included. `RESULTS-COMPUTE-NORMALIZED-AND-EFFECT-SIZE-2026-09-10` |
 | Conditional 30k return extension (DMC) | DEFERRED / GATED | Hypothesis: lagged_eq - ordinary return +0.101 [+0.016, +0.199] (descriptive only); runs only if the payoff question is still worth its compute |
 | Hypothesis-A correction (eq_crn / E4) | NOT BUILT | Pre-committed gate: only after a confirmatory E1 at registered n |
 | Hypothesis C (gradient interference) | REGISTERED 2026-09-10, gates pre-answered | Gate 1 architecture: `member` and `epistemic_w`/`aleatoric_g` share the trunk - Jaccard(point, uncertainty)=1.00 on the real DelayedBimodal checkpoint and on the Hopper (15/4) topology, so C is coherent. Probe + adjudicator implemented and wiring-validated; no adjudicable row yet (DMC side needs a GPU window). `HYPOTHESIS-C-PREREGISTRATION-2026-09-10` |
@@ -245,9 +245,10 @@ NOT YET SAFE (do not put in the manuscript as results):
    operating point: plan a higher-budget sanity (e.g. 30k) before any arm
    comparison, and confirm the return axis stays usable (it is not
    floor-bound at 15k - first positive signal for Hypothesis B).
-3. Compute-normalized re-analysis + effect-size report - run locally now
-   (zero GPU, scripts staged, methods note already pre-committed). This is
-   free and closes the longest-open cross-cutting item.
+3. ~~Compute-normalized re-analysis + effect-size report~~ - **DONE 2026-09-10**,
+   locally, zero GPU (see 4c). Closes the longest-open cross-cutting item; the
+   read is that eq's deficit does not narrow at fixed compute and the headline
+   `eq - ordinary` deficit is d_z = -2.63, ~5x the n=10 MDE.
 4. CRN - no further run is recommended unless the normalization-vs-staleness
    question matters for the paper; if it does, register the n=30 2x2 E2
    adjudication (the DMC normalization cells have never been run at n=30 and

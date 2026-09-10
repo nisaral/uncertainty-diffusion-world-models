@@ -307,3 +307,37 @@ n=30 - so an n=10 E2 null sits below the MDE and is not evidence of absence
 
 DMC side needs a GPU window and must not displace the MACURA n=30 completion or
 the Walker2d budget decision.
+
+## Addendum 2026-09-10 (c): the two long-open free items are run - compute-normalized re-analysis + effect-size/power report
+
+Both zero-GPU items from the master-plan-v3 script specs were run locally on the
+already-adjudicated rows (no new training, no bar re-opened):
+
+- [RESULTS-COMPUTE-NORMALIZED-AND-EFFECT-SIZE-2026-09-10.md](RESULTS-COMPUTE-NORMALIZED-AND-EFFECT-SIZE-2026-09-10.md)
+- `udwm/scripts/reanalyze_compute_normalized.py` (item 2),
+  `udwm/scripts/effect_size_report.py` (item 5a);
+  registration: [COMPUTE-NORMALIZED-REANALYSIS-2026-09-09.md](COMPUTE-NORMALIZED-REANALYSIS-2026-09-09.md).
+
+**Compute normalization (item 2).** Cost multipliers are read from
+`udwm/models/consistency.py`, not assumed: `ordinary` 1x, hybrid family 5x,
+identified family 10x teacher samples per model-train epoch. Re-indexing the DMC
+30-seed u-rank curves against teacher-sample spend, the ordering does not change
+and eq's deficit does not narrow - `ordinary` reaches 0.954 at 1,776u while
+`identified_eq` needs 17,760u for 0.712 (0.040 vs 0.537 u_rank/1000u, ~13x).
+DelayedBimodal shows the same shape. A true fixed-compute head-to-head is **not
+readable** from these rows (every arm ran 15k env steps, so the common
+teacher-sample domain is empty); the doc states that instead of extrapolating.
+
+**Effect size / power (item 5a).** Additive to the raw delta + CI + wins/N:
+`eq - ordinary` d_z = **-2.63** (0/30), about 5x the n=10 MDE and ~3x the n=30
+MDE, so the DMC failure of the identified arm is not a power problem; `eq -
+hybrid` d_z = -0.14 (13/30) recasts the registered Bar-2 wash on a standardized
+scale; the mechanism contrast is the largest effect in the study (`ordinary -
+EMA` +8.01, `eq - EMA` +5.33, both 30/30). The retroactive CRN-E1 MDE note
+closes the item-5a gap for that study: n=10 could only detect ~0.08-0.12 on a
+u_rank-scaled endpoint, which is why the CRN E1 readout was called uninformative
+rather than negative.
+
+No DMC/DB verdict, bar, or win/N count changes; both items are re-readings of
+already-adjudicated rows.
+
