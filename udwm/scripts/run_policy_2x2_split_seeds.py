@@ -12,6 +12,11 @@ one prepared teacher (exact checksum pairing, gap 0) and each arm calls
 ``set_seed(seed)`` before training. Splitting by seed is only a process-
 topology choice; no arm is added, dropped, or re-weighted post-hoc.
 
+The merge is race-safe: it reads any rows already in ``--out``, unions this
+invocation's rows under an exclusive lock, asserts that every requested
+``(seed, arm)`` is present, and only then writes atomically (tmp + rename) and
+removes the partials.  See ``udwm/utils/atomic_merge.py``.
+
 Usage:
     python -m udwm.scripts.run_policy_2x2_split_seeds \
         --seeds 0 1 2 3 4 5 6 7 8 9 \
@@ -34,6 +39,8 @@ from udwm.scripts.run_delayed_bimodal_policy_ablation import (
     build_pairing,
     summarize,
 )
+
+from udwm.utils.atomic_merge import merge_rows_additive
 
 VARIANT_ORDER = ["ordinary", "hybrid", "lagged_hybrid", "identified_hybrid", "lagged_identified"]
 
@@ -144,43 +151,58 @@ def main(argv=None) -> None:
             for fut in as_completed(futures):
                 fut.result()
 
-    rows: list[dict] = []
+    # Collect this invocation's rows: the union of each seed's partial file and
+    # any --existing canonical rows for arms that partial does not carry.
+    added: list[dict] = []
     for s in args.seeds:
+        want = set(args.variants)
+        have: list[dict] = []
         path = seed_file(out, s)
         if path.exists():
-            rows.extend(json.loads(path.read_text(encoding="utf-8")).get("rows", []))
-            continue
-        want = set(args.variants)
-        src = [r for r in existing_rows if int(r["seed"]) == s and r["variant"] in want]
-        rows.extend(src)
-        if len(src) < len(want):
-            raise SystemExit(f"[split] no rows available for seed {s}: {len(src)}/{len(want)} arms")
-    order = {v: i for i, v in enumerate(args.variants)}
-    rows.sort(key=lambda r: (int(r["seed"]), order.get(r["variant"], 99)))
-    payload = {
-        "protocol": {
-            "config": args.config,
-            "seeds": list(args.seeds),
-            "steps": args.steps,
-            "variants": list(args.variants),
-            "out": str(out),
-            "resume": False,
-            "driver": "run_policy_2x2_split_seeds.py (per-seed batches, merged)",
-            "device": args.device if args.device else "config",
-            "gpu_ids": gpu_ids,
-        },
-        "rows": rows,
-        "teacher_pairing": build_pairing(rows),
-        "summary": summarize(rows),
+            have = json.loads(path.read_text(encoding="utf-8")).get("rows", [])
+        got = {r["variant"] for r in have}
+        if got < want:
+            have = have + [r for r in existing_rows
+                           if int(r["seed"]) == s and r["variant"] in want
+                           and r["variant"] not in got]
+        added.extend(have)
+
+    # Additive, lock-serialized, atomic merge.  This reads any rows already in
+    # --out back and unions them, so two invocations sharing one --out can never
+    # drop each other's seeds (the last-writer-wins race), and a merge that
+    # cannot account for every requested (seed, arm) fails loudly instead of
+    # silently emitting a short file.  See udwm/utils/atomic_merge.py.
+    expected = {(s, v) for s in args.seeds for v in args.variants}
+    protocol = {
+        "config": args.config,
+        "seeds": list(args.seeds),
+        "steps": args.steps,
+        "variants": list(args.variants),
+        "out": str(out),
+        "resume": False,
+        "driver": "run_policy_2x2_split_seeds.py (per-seed batches, merged)",
+        "device": args.device if args.device else "config",
+        "gpu_ids": gpu_ids,
     }
-    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"[split] merged {len(rows)} rows -> {out}")
-    for s in sorted({int(r["seed"]) for r in rows}):
-        print(f"[split] seed {s}: {json.dumps(payload['teacher_pairing'].get(str(s), {}))}")
-    if not args.keep_partials:
-        for s in args.seeds:
-            seed_file(out, s).unlink(missing_ok=True)
-        print("[split] removed partial files (--keep-partials to retain)")
+    ok = merge_rows_additive(
+        out, added, expected, protocol,
+        protocol_keys=("config", "steps", "variants"),
+        pairing_fn=build_pairing,
+        extras_fn=lambda rows: {"summary": summarize(rows)},
+        cleanup_paths_fn=lambda: [seed_file(out, s) for s in args.seeds],
+        variant_order=list(args.variants),
+        keep_partials=args.keep_partials,
+        label="split",
+    )
+    if not ok:
+        raise SystemExit(
+            "[split] merge refused or incomplete; {} and the partial files were "
+            "left untouched. Fix/complete the missing rows and re-run the same "
+            "command to resume.".format(out))
+
+    merged_payload = json.loads(out.read_text(encoding="utf-8"))
+    for s in sorted({int(r["seed"]) for r in merged_payload["rows"]}):
+        print(f"[split] seed {s}: {json.dumps(merged_payload['teacher_pairing'].get(str(s), {}))}")
 
 
 if __name__ == "__main__":

@@ -74,6 +74,8 @@ from udwm.scripts.run_delayed_bimodal_policy_ablation import (
 )
 from udwm.utils.config import load_config, set_seed
 
+from udwm.utils.atomic_merge import merge_rows_additive
+
 ROOT = Path(__file__).resolve().parents[2]
 
 # Registered arm list for the Hypothesis-C probe.
@@ -342,79 +344,25 @@ def build_pairing(rows):
     return pairing
 
 
-def _read_row_map(out):
-    if not out.exists():
-        return {}
-    try:
-        payload = json.loads(out.read_text(encoding="utf-8"))
-        return {(int(r["seed"]), r["variant"]): r for r in payload.get("rows", [])}
-    except (ValueError, KeyError, TypeError):
-        return {}
-
-
-def _protocol_mismatch(out, protocol):
-    try:
-        old = json.loads(out.read_text(encoding="utf-8")).get("protocol", {})
-    except ValueError:
-        return True
-    keys = ("config", "steps", "probe_every", "probe_batches", "student_hidden",
-            "registration")
-    return any(old.get(k) != protocol.get(k) for k in keys)
-
-
 def merge_out_additive(out, added_rows, expected, protocol, variants, *,
                        keep_partials=False, delete_partials=True):
-    """Union added rows into the canonical --out under an advisory lock.
+    """Union added rows into the canonical ``--out`` (race-safe).
 
-    Same race-safe pattern as probe_crn_bias.py: read-existing -> union ->
-    validate completeness -> atomic rename, so concurrent finishers sharing one
-    --out cannot overwrite each other's rows.
+    Shared implementation: ``udwm/utils/atomic_merge.py`` - read-existing
+    -> union -> validate completeness -> atomic rename, under an exclusive
+    lock, so concurrent finishers sharing one ``--out`` cannot overwrite
+    each other's rows (and the partials are only removed once every
+    requested ``(seed, variant)`` is accounted for).
     """
-    added = {(int(r["seed"]), r["variant"]): r for r in added_rows}
-    lock_fd = None
-    try:
-        import fcntl
-        lock_fd = open(out.with_name(out.name + ".lock"), "a+")
-        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
-    except (ImportError, OSError):
-        pass
-    try:
-        merged = _read_row_map(out)
-        if merged and _protocol_mismatch(out, protocol):
-            print("[gi] FATAL: existing rows in {} are from a different protocol; "
-                  "refusing to union. Use a fresh --out.".format(out.name))
-            return False
-        merged.update(added)
-        missing = sorted(expected - set(merged))
-        rows = [merged[k] for k in sorted(merged)]
-        if missing:
-            shown = ", ".join("s{}:{}".format(s, v) for s, v in missing[:8])
-            more = " ..." if len(missing) > 8 else ""
-            print("[gi] FATAL: expected {} (seed, variant) rows, found {}; "
-                  "{} missing: {}{}".format(len(expected), len(rows),
-                                            len(missing), shown, more))
-            return False
-        payload = {"protocol": protocol, "rows": rows,
-                   "teacher_pairing": build_pairing(rows)}
-        tmp = out.with_name(out.name + ".tmp")
-        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(tmp, out)
-        print("[gi] merged {} rows -> {} (expected {})".format(
-            len(rows), out, len(expected)))
-        if delete_partials and not keep_partials:
-            for seed in sorted({int(s) for s, _ in expected}):
-                for variant in variants:
-                    partial_path(out, seed, variant).unlink(missing_ok=True)
-            print("[gi] removed partial files (--keep-partials to retain)")
-        return True
-    finally:
-        if lock_fd is not None:
-            try:
-                import fcntl
-                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
-            except Exception:
-                pass
-            lock_fd.close()
+    return merge_rows_additive(
+        out, added_rows, expected, protocol,
+        protocol_keys=("config", "steps", "probe_every", "probe_batches", "student_hidden",
+                  "registration"),
+        pairing_fn=build_pairing,
+        cleanup_paths_fn=lambda: [partial_path(out, s, v) for s, v in sorted(expected)],
+        keep_partials=keep_partials, delete_partials=delete_partials,
+        label="gi",
+    )
 
 
 def main(argv=None):

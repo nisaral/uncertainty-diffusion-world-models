@@ -84,6 +84,8 @@ from udwm.scripts.run_delayed_bimodal_policy_ablation import (
 from udwm.uncertainty.mc_ube import MCUBELocalRewards
 from udwm.utils.config import load_config, set_seed
 
+from udwm.utils.atomic_merge import merge_rows_additive
+
 ROOT = Path(__file__).resolve().parents[2]
 
 # The registered 2x2 + control arms (research/CRN-BIAS-PROBE-PREREGISTRATION).
@@ -362,85 +364,25 @@ def build_pairing(rows):
 
 
 
-def _read_row_map(out):
-    """Existing canonical rows as {(seed, variant): row}; {} if absent/broken."""
-    if not out.exists():
-        return {}
-    try:
-        payload = json.loads(out.read_text(encoding="utf-8"))
-        return {(int(r["seed"]), r["variant"]): r for r in payload.get("rows", [])}
-    except (ValueError, KeyError, TypeError):
-        return {}
-
-
-def _protocol_mismatch(out, protocol):
-    """True when out already holds rows from a different protocol (refuse union)."""
-    try:
-        old = json.loads(out.read_text(encoding="utf-8")).get("protocol", {})
-    except ValueError:
-        return True
-    keys = ("config", "steps", "probe_states", "probe_m", "registration")
-    return any(old.get(k) != protocol.get(k) for k in keys)
-
-
 def merge_out_additive(out, added_rows, expected, protocol, variants, *,
                        keep_partials=False, delete_partials=True):
-    """Union added rows into the canonical --out under an advisory lock.
+    """Union added rows into the canonical ``--out`` (race-safe).
 
-    Reads any rows already in out (other workers / earlier merges), unions this
-    invocation's rows (this invocation wins on duplicates), validates that every
-    requested (seed, variant) is present, writes atomically (tmp + rename), and
-    only then removes the partials for the requested seeds. Concurrent workers
-    sharing one --out serialize on the lock, so the last finisher sees the union
-    of all workers' rows instead of overwriting them. A missing row fails loudly
-    and leaves both the file and the partials untouched for resume.
+    Shared implementation: ``udwm/utils/atomic_merge.py`` - read-existing
+    -> union -> validate completeness -> atomic rename, under an exclusive
+    lock, so concurrent finishers sharing one ``--out`` cannot overwrite
+    each other's rows (and the partials are only removed once every
+    requested ``(seed, variant)`` is accounted for).
     """
-    added = {(int(r["seed"]), r["variant"]): r for r in added_rows}
-    lock_fd = None
-    try:
-        import fcntl  # POSIX hosts (the probe runs on Linux VMs)
-        lock_fd = open(out.with_name(out.name + ".lock"), "a+")
-        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
-    except (ImportError, OSError):
-        pass  # non-POSIX fallback: single-writer assumption only
-    try:
-        merged = _read_row_map(out)
-        if merged and _protocol_mismatch(out, protocol):
-            print("[probe] FATAL: existing rows in {} are from a different "
-                  "protocol (config/steps/probe settings); refusing to union. "
-                  "Use a fresh --out for a different study/budget.".format(out.name))
-            return False
-        merged.update(added)
-        missing = sorted(expected - set(merged))
-        rows = [merged[k] for k in sorted(merged)]
-        if missing:
-            shown = ", ".join("s{}:{}".format(s, v) for s, v in missing[:8])
-            more = " ..." if len(missing) > 8 else ""
-            print("[probe] FATAL: expected {} (seed, variant) rows for requested "
-                  "seeds x arms, found {} in file; {} missing: {}{}".format(
-                      len(expected), len(rows), len(missing), shown, more))
-            return False
-        payload = {"protocol": protocol, "rows": rows,
-                   "teacher_pairing": build_pairing(rows)}
-        tmp = out.with_name(out.name + ".tmp")
-        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(tmp, out)
-        print("[probe] merged {} rows -> {} (expected {} for requested seeds x arms)"
-              .format(len(rows), out, len(expected)))
-        if delete_partials and not keep_partials:
-            for seed in sorted({int(s) for s, _ in expected}):
-                for variant in variants:
-                    partial_path(out, seed, variant).unlink(missing_ok=True)
-            print("[probe] removed partial files (--keep-partials to retain)")
-        return True
-    finally:
-        if lock_fd is not None:
-            try:
-                import fcntl
-                fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
-            except Exception:
-                pass
-            lock_fd.close()
+    return merge_rows_additive(
+        out, added_rows, expected, protocol,
+        protocol_keys=("config", "steps", "probe_states", "probe_m", "registration"),
+        pairing_fn=build_pairing,
+        cleanup_paths_fn=lambda: [partial_path(out, s, v) for s, v in sorted(expected)],
+        keep_partials=keep_partials, delete_partials=delete_partials,
+        label="probe",
+    )
+
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
