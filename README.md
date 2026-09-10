@@ -20,6 +20,11 @@ model, **not** conformal coverage, and **not** a SOTA control claim.
 
 ## Visual tour (start here)
 
+- **Distill lab (toy, not a SOTA agent)** — four losses on one `(w, g)` field,
+  live u-rank, percentile gate. CPU, one click. It does **not** win control:
+  [`demo/index.html`](demo/index.html) · Hugging Face Space:
+  [nisaralll/udwm-distill-lab](https://huggingface.co/spaces/nisaralll/udwm-distill-lab).
+  This is a laboratory for the *loss*. The tables in `research/` are the evidence.
 - **Interactive verdict explorer** - self-contained page (works offline and
   on GitHub Pages, no server): [`visuals/v4-explorer.html`](visuals/v4-explorer.html).
   Click the 90-second story, then V1 geometry, V2 EMA-collapse training curves, V3 ordering flip,

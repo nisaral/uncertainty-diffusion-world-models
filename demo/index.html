@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>UDWM distill lab — a laboratory for a loss, not a SOTA agent</title>
+<style>
+  :root{
+    --ink:#0f172a; --mut:#475569; --faint:#94a3b8; --line:#e2e8f0;
+    --card:#fff; --bg:#f1f5f9; --accent:#1d4ed8;
+    --c-ordinary:#1d4ed8; --c-hybrid:#f59e0b; --c-eq:#16a34a; --c-ema:#dc2626;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 "Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+  header{background:linear-gradient(180deg,#0f172a,#1e293b);color:#e2e8f0;padding:36px 20px 28px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px 56px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#93c5fd;font-weight:700;margin:0 0 8px}
+  h1{font-size:28px;line-height:1.2;margin:0 0 10px;color:#fff;max-width:920px}
+  .lede{color:#cbd5e1;max-width:920px;margin:0}
+  .warn{background:#422006;border:1px solid #854d0e;color:#fde68a;border-radius:10px;
+        padding:10px 14px;margin:16px 0 0;font-size:13.5px;max-width:920px}
+  section{margin:32px 0 0}
+  h2{font-size:20px;margin:0 0 6px}
+  .sub{color:var(--mut);margin:0 0 14px;font-size:14px;max-width:900px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 14px}
+  button{font:inherit;border-radius:8px;padding:8px 16px;cursor:pointer;border:1px solid var(--line);background:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.on{background:#0f172a;color:#fff;border-color:#0f172a}
+  .grids{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  .cell{background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px}
+  .cell h3{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between}
+  canvas{width:100%;height:auto;image-rendering:pixelated;border-radius:8px;background:#0f172a;display:block}
+  .stat{font-size:12px;color:var(--mut);margin-top:6px;font-variant-numeric:tabular-nums}
+  .legend{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12.5px;color:var(--mut);margin-top:10px}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--mut);background:#f8fafc;font-size:12px}
+  a{color:#1d4ed8}
+  footer{font-size:12.5px;color:var(--mut);margin-top:36px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="padding-bottom:0">
+    <p class="eyebrow">Uncertainty-diffusion world models · toy laboratory</p>
+    <h1>Decision-aware distillation does not identify epistemic uncertainty</h1>
+    <p class="lede">
+      Four students, one 2-D <b>(w, g)</b> field, one click. The map is aleatoric-dominated
+      (<code>g* ≫ w*</code>), the regime measured on DelayedBimodal and hopper-hop.
+      This is a laboratory for a <i>loss</i>, not a SOTA agent — it does not win control.
+    </p>
+    <p class="warn">
+      <b>Not a deployed policy.</b> Nothing here is a robot, an LLM agent, or a return claim.
+      Use it the way an Infoprop / MACURA user should: inspect teacher–student
+      <i>u</i>-rank <em>before</em> trusting a distilled student to gate imagination.
+    </p>
+  </div>
+</header>
+
+<div class="wrap">
+  <section>
+    <h2>1. Train the four losses</h2>
+    <p class="sub">
+      <b>ordinary</b> matches member means (ranking usually holds).
+      <b>hybrid</b> matches one mixed scalar — the M=1 fibre; it can walk <i>w → 0</i>.
+      <b>identified_eq</b> matches <i>(w, g)</i> with equal weights.
+      <b>identified_ema</b> uses inverse-variance EMA weights; on this map the aleatoric term is numerically dead.
+    </p>
+    <div class="panel">
+      <div class="row">
+        <button class="primary" id="train">Train all four (CPU, ~instant)</button>
+        <span id="status" style="color:var(--mut);font-size:13.5px">Idle — press train.</span>
+      </div>
+      <div class="grids" id="heatmaps"></div>
+      <div class="legend">
+        <span><i class="sw" style="background:#0b1220"></i>low |u| (less uncertain)</span>
+        <span><i class="sw" style="background:#93c5fd"></i>high |u| (more uncertain)</span>
+        <span>Heatmaps are teacher vs student <b>u = w − g</b>. Rank-only: do not read the color scale as calibrated magnitude.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Rank correlation over training</h2>
+    <p class="sub">Spearman of teacher <i>u</i> vs student <i>u</i>. EMA goes to noise. Equal-weight recovers ranking. Ordinary holds. Hybrid walks the fibre.</p>
+    <div class="panel"><canvas id="chart" width="960" height="280"></canvas></div>
+  </section>
+
+  <section>
+    <h2>3. Gate preview — would Infoprop / MACURA trust this student?</h2>
+    <p class="sub">
+      Percentile-0.85 stop on |u|. Green = agree keep, slate = agree stop,
+      <b style="color:#b91c1c">red = over-keep</b> (student trusts a state the teacher would refuse),
+      orange = under-keep. This is the composition failure in miniature: a different gate
+      on a destroyed object does not fix ranking.
+    </p>
+    <div class="row" id="armBtns"></div>
+    <div class="panel">
+      <div class="grids" style="grid-template-columns:1fr 1fr">
+        <div class="cell">
+          <h3>Teacher vs student scatter</h3>
+          <canvas id="scatter" width="420" height="420"></canvas>
+        </div>
+        <div class="cell">
+          <h3 id="gateTitle">Gate disagreement</h3>
+          <canvas id="gate" width="420" height="420"></canvas>
+          <div class="stat" id="gateStat"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Recorded paper numbers (not this toy)</h2>
+    <p class="sub">Adjudicated tables. The toy above is a cartoon of the loss; these are the experiments.</p>
+    <div class="panel">
+      <table>
+        <thead>
+          <tr><th>Study</th><th>ordinary</th><th>identified_eq</th><th>EMA / hybrid</th><th>MACURA gate</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>DMC hopper-hop 15k, N=30 u-rank</td>
+            <td><b>0.957</b> (30/30 ≥0.70)</td>
+            <td>0.711 (15/30)</td>
+            <td>−0.076 (0/30)</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>MACURA field baseline, N=30 u-rank</td>
+            <td>0.961 (30/30)</td>
+            <td>0.706 (18/30)</td>
+            <td>—</td>
+            <td>0.953 (30/30) · parity −0.009 vs ordinary</td>
+          </tr>
+          <tr>
+            <td>DelayedBimodal N=10 (rank-only)</td>
+            <td>0.934</td>
+            <td>0.948 (eq_norm)</td>
+            <td>0.114</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="stat" style="margin-top:10px">
+        MACURA does not beat plain self-gating. Returns on hopper at 15k are floor-bound — no payoff claim.
+        w-scale is rank-only after G7/G9. Sources:
+        <a href="../research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md">DMC 30-seed</a>,
+        <a href="../research/RESULTS-MACURA-DMC-30SEED-2026-09-10.md">MACURA 30-seed</a>.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    Code: <a href="https://github.com/nisaral/uncertainty-diffusion-world-models">nisaral/uncertainty-diffusion-world-models</a>
+    · Lab: <code>python -m demo.lab</code>
+    · Explorer: <a href="../visuals/v4-explorer.html">visuals/v4-explorer.html</a>
+    · This page is a toy. It is not evidence. The tables are.
+  </footer>
+</div>
+
+<script>
+const N = 24, STEPS = 280, RHO = 0.8, GATE_Q = 0.85;
+const KEYS = ["ordinary","hybrid","identified_eq","identified_ema"];
+const LABELS = {
+  ordinary: "ordinary",
+  hybrid: "hybrid (M=1)",
+  identified_eq: "identified_eq",
+  identified_ema: "identified_ema"
+};
+const COLORS = {ordinary:"#1d4ed8", hybrid:"#f59e0b", identified_eq:"#16a34a", identified_ema:"#dc2626"};
+
+function teacherWG(){
+  const w=[], g=[], u=[], S=[];
+  for(let j=0;j<N;j++){
+    w[j]=[]; g[j]=[]; u[j]=[]; S[j]=[];
+    for(let i=0;i<N;i++){
+      const x = (i/(N-1))*2-1, y=(j/(N-1))*2-1;
+      const ww = 0.008 + 0.35*Math.exp(-(x*x)/0.08);
+      const gg = 18 + 55*(0.5 + 0.5*y);
+      w[j][i]=ww; g[j][i]=gg; u[j][i]=ww-gg; S[j][i]=ww+(1-RHO)*gg;
+    }
+  }
+  return {w,g,u,S};
+}
+function zeros(){ const a=[]; for(let j=0;j<N;j++){ a[j]=[]; for(let i=0;i<N;i++) a[j][i]=0; } return a; }
+function copy2(src){ return src.map(r=>r.slice()); }
+function spearman(A,B){
+  const a=A.flat(), b=B.flat(), n=a.length;
+  const rank = arr => {
+    const idx=[...arr.keys()].sort((i,j)=>arr[i]-arr[j]);
+    const r=Array(n); idx.forEach((i,k)=>r[i]=k); return r;
+  };
+  const ra=rank(a), rb=rank(b);
+  let ma=0,mb=0; for(let i=0;i<n;i++){ma+=ra[i]; mb+=rb[i];} ma/=n; mb/=n;
+  let num=0, da=0, db=0;
+  for(let i=0;i<n;i++){ const x=ra[i]-ma, y=rb[i]-mb; num+=x*y; da+=x*x; db+=y*y; }
+  return (da<1e-12||db<1e-12)?0:num/Math.sqrt(da*db);
+}
+function quantile(arr, q){
+  const s=[...arr].sort((a,b)=>a-b);
+  const i=(s.length-1)*q; const lo=Math.floor(i), hi=Math.ceil(i);
+  return s[lo]+(s[hi]-s[lo])*(i-lo);
+}
+function heat(canvas, field, abs=true){
+  const ctx=canvas.getContext("2d");
+  const img=ctx.createImageData(N,N);
+  let mn=Infinity, mx=-Infinity;
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const v=abs?Math.abs(field[j][i]):field[j][i];
+    if(v<mn)mn=v; if(v>mx)mx=v;
+  }
+  const span=Math.max(mx-mn,1e-9);
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const t=(Math.abs(field[j][i])-mn)/span;
+    const p=4*(j*N+i);
+    img.data[p]=Math.round(11+147*t);
+    img.data[p+1]=Math.round(18+179*t);
+    img.data[p+2]=Math.round(32+221*t);
+    img.data[p+3]=255;
+  }
+  const tmp=document.createElement("canvas"); tmp.width=N; tmp.height=N;
+  tmp.getContext("2d").putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=false;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(tmp,0,0,canvas.width,canvas.height);
+}
+function drawChart(hist){
+  const c=document.getElementById("chart"); const ctx=c.getContext("2d");
+  const W=c.width, H=c.height, pad=36;
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle="#e2e8f0"; ctx.beginPath();
+  ctx.moveTo(pad,10); ctx.lineTo(pad,H-pad); ctx.lineTo(W-10,H-pad); ctx.stroke();
+  ctx.fillStyle="#94a3b8"; ctx.font="12px sans-serif";
+  ctx.fillText("u-rank", 8, 18); ctx.fillText("step", W-40, H-12);
+  KEYS.forEach(k=>{
+    const ys=hist[k]; if(!ys.length) return;
+    ctx.strokeStyle=COLORS[k]; ctx.lineWidth=2; ctx.beginPath();
+    ys.forEach((y,i)=>{
+      const x=pad+(W-pad-10)*i/Math.max(ys.length-1,1);
+      const yy=(H-pad)-(y+0.2)/(1.2)*(H-pad-10);
+      i?ctx.lineTo(x,yy):ctx.moveTo(x,yy);
+    });
+    ctx.stroke();
+  });
+}
+function drawScatter(tu, su){
+  const c=document.getElementById("scatter"); const ctx=c.getContext("2d");
+  const W=c.width, H=c.height, pad=28;
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+  const flatT=tu.flat(), flatS=su.flat();
+  const min=Math.min(...flatT,...flatS), max=Math.max(...flatT,...flatS), span=max-min||1;
+  const xy=v=>pad+(v-min)/span*(W-2*pad);
+  const yx=v=>H-pad-(v-min)/span*(H-2*pad);
+  ctx.strokeStyle="#e2e8f0"; ctx.beginPath();
+  ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad,pad); ctx.stroke();
+  ctx.fillStyle="#1d4ed8";
+  for(let i=0;i<flatT.length;i++){
+    ctx.globalAlpha=0.55;
+    ctx.beginPath(); ctx.arc(xy(flatT[i]), yx(flatS[i]), 2.2, 0, 6.3); ctx.fill();
+  }
+  ctx.globalAlpha=1; ctx.fillStyle="#64748b"; ctx.font="12px sans-serif";
+  ctx.fillText("teacher u", W/2-30, H-8); ctx.save();
+  ctx.translate(12,H/2); ctx.rotate(-Math.PI/2); ctx.fillText("student u",0,0); ctx.restore();
+}
+function drawGate(map){
+  const c=document.getElementById("gate"); const ctx=c.getContext("2d");
+  const pal=[[34,197,94],[100,116,139],[249,115,22],[185,28,28]];
+  const img=ctx.createImageData(N,N);
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    const v=map[j][i], p=4*(j*N+i), col=pal[v]||pal[0];
+    img.data[p]=col[0]; img.data[p+1]=col[1]; img.data[p+2]=col[2]; img.data[p+3]=255;
+  }
+  const tmp=document.createElement("canvas"); tmp.width=N; tmp.height=N;
+  tmp.getContext("2d").putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=false;
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.drawImage(tmp,0,0,c.width,c.height);
+}
+
+let STATE=null, CURRENT="identified_ema";
+
+function train(){
+  const t=teacherWG();
+  const rng = (function(){ let s=1; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/2**32; };})();
+  const init = ()=>{
+    const w=zeros(), g=zeros();
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      w[j][i]=Math.exp(-2.2+0.25*(rng()*2-1));
+      g[j][i]=Math.exp(-0.4+0.25*(rng()*2-1));
+    }
+    return {w,g,ranks:[], gr:[]};
+  };
+  const arms={ordinary:init(), hybrid:init(), identified_eq:init(), identified_ema:init()};
+  let emaW=0, emaG=0, ncell=N*N;
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){ emaW+=t.w[j][i]; emaG+=t.g[j][i]; }
+  emaW/=ncell; emaG/=ncell;
+  const lr=0.12, beta=0.99;
+  const rec=()=>{
+    KEYS.forEach(k=>{
+      const u=zeros();
+      for(let j=0;j<N;j++) for(let i=0;i<N;i++) u[j][i]=arms[k].w[j][i]-arms[k].g[j][i];
+      arms[k].ranks.push(spearman(t.u,u));
+      let gs=0,gt=0;
+      for(let j=0;j<N;j++) for(let i=0;i<N;i++){ gs+=arms[k].g[j][i]; gt+=t.g[j][i]; }
+      arms[k].gr.push(gs/gt);
+    });
+  };
+  rec();
+  for(let step=0; step<STEPS; step++){
+    const o=arms.ordinary;
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      o.w[j][i]+=lr*(t.w[j][i]-o.w[j][i]);
+      o.g[j][i]+=0.35*lr*(t.g[j][i]-o.g[j][i]);
+    }
+    const h=arms.hybrid;
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      const Ss=h.w[j][i]+(1-RHO)*h.g[j][i];
+      const err=Ss-t.S[j][i];
+      h.w[j][i]-=lr*err;
+      h.g[j][i]-=lr*(1-RHO)*err;
+      h.w[j][i]=Math.max(h.w[j][i]-0.015*lr*h.w[j][i], 1e-6);
+      h.g[j][i]=Math.max(h.g[j][i], 1e-6);
+    }
+    const e=arms.identified_eq;
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      e.w[j][i]+=lr*(t.w[j][i]-e.w[j][i]);
+      e.g[j][i]+=lr*(t.g[j][i]-e.g[j][i]);
+    }
+    const m=arms.identified_ema;
+    let mw=0, mg=0;
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){ mw+=t.w[j][i]; mg+=t.g[j][i]; }
+    emaW=beta*emaW+(1-beta)*mw/ncell; emaG=beta*emaG+(1-beta)*mg/ncell;
+    const ww=1/Math.max(emaW,1e-6)**2, wg=1/Math.max(emaG,1e-6)**2, sc=Math.max(ww,wg);
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      m.w[j][i]+=lr*(ww/sc)*(t.w[j][i]-m.w[j][i]);
+      m.g[j][i]+=lr*(wg/sc)*(t.g[j][i]-m.g[j][i]);
+      m.g[j][i]=Math.max(m.g[j][i],1e-6);
+    }
+    if(step%4===0) rec();
+  }
+  rec();
+  const packed={};
+  KEYS.forEach(k=>{
+    const u=zeros(), absT=[], absS=[];
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      u[j][i]=arms[k].w[j][i]-arms[k].g[j][i];
+      absT.push(Math.abs(t.u[j][i])); absS.push(Math.abs(u[j][i]));
+    }
+    const tauT=quantile(absT, GATE_Q), tauS=quantile(absS, GATE_Q);
+    const map=zeros();
+    let over=0, under=0, ak=0, as=0;
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      const tStop=Math.abs(t.u[j][i])>=tauT, sStop=Math.abs(u[j][i])>=tauS;
+      if(!sStop && tStop){ map[j][i]=3; over++; }
+      else if(sStop && !tStop){ map[j][i]=2; under++; }
+      else if(sStop){ map[j][i]=1; as++; }
+      else { map[j][i]=0; ak++; }
+    }
+    const tot=N*N;
+    packed[k]={ u, ranks:arms[k].ranks, gr:arms[k].gr, map,
+      over:over/tot, under:under/tot, rank:arms[k].ranks.at(-1), grf:arms[k].gr.at(-1) };
+  });
+  STATE={ teacher:t, arms:packed };
+  render();
+}
+
+function render(){
+  if(!STATE) return;
+  const host=document.getElementById("heatmaps");
+  host.innerHTML="";
+  const make= (title, field, extra)=>{
+    const d=document.createElement("div"); d.className="cell";
+    d.innerHTML=`<h3>${title}</h3><canvas width="240" height="240"></canvas><div class="stat">${extra||""}</div>`;
+    host.appendChild(d); heat(d.querySelector("canvas"), field);
+  };
+  make("teacher u", STATE.teacher.u, "ground-truth field");
+  KEYS.forEach(k=>{
+    const a=STATE.arms[k];
+    make(LABELS[k], a.u, `u-rank ${a.rank.toFixed(3)} · g ratio ${a.grf.toFixed(3)}`);
+  });
+  const hist={}; KEYS.forEach(k=>hist[k]=STATE.arms[k].ranks);
+  drawChart(hist);
+  showArm(CURRENT);
+  document.getElementById("status").textContent="Trained. EMA should sit near 0 rank; equal-weight and ordinary should not.";
+}
+
+function showArm(k){
+  CURRENT=k;
+  document.querySelectorAll("#armBtns button").forEach(b=>b.classList.toggle("on", b.dataset.k===k));
+  if(!STATE) return;
+  const a=STATE.arms[k];
+  drawScatter(STATE.teacher.u, a.u);
+  drawGate(a.map);
+  document.getElementById("gateTitle").textContent="Gate disagreement — "+LABELS[k];
+  document.getElementById("gateStat").textContent =
+    `over-keep ${ (a.over*100).toFixed(1) }%   under-keep ${ (a.under*100).toFixed(1) }%   (red = student keeps what the teacher would stop)`;
+}
+
+document.getElementById("armBtns").innerHTML = KEYS.map(k=>
+  `<button data-k="${k}" style="border-color:${COLORS[k]}">${LABELS[k]}</button>`
+).join("");
+document.querySelectorAll("#armBtns button").forEach(b=>b.addEventListener("click",()=>showArm(b.dataset.k)));
+document.getElementById("train").addEventListener("click", ()=>{
+  document.getElementById("status").textContent="Training…";
+  setTimeout(train, 20);
+});
+</script>
+</body>
+</html>

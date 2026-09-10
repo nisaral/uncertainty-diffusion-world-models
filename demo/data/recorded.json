@@ -1,0 +1,25 @@
+{
+  "disclaimer": "Laboratory for a loss, not a SOTA agent. Numbers below are adjudicated paper tables, not this toy.",
+  "dmc_hopper_15k_n30": {
+    "ordinary": {"u_rank": 0.957, "n_ge_070": "30/30"},
+    "identified_eq": {"u_rank": 0.711, "n_ge_070": "15/30"},
+    "identified_ema": {"u_rank": -0.076, "n_ge_070": "0/30"},
+    "lagged_identified_eq": {"u_rank": 0.638, "n_ge_070": "8/30"},
+    "source": "research/RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08.md"
+  },
+  "macura_dmc_15k_n30": {
+    "ordinary": {"u_rank": 0.961, "n_ge_070": "30/30"},
+    "macura_gate": {"u_rank": 0.953, "n_ge_070": "30/30"},
+    "identified_eq": {"u_rank": 0.706, "n_ge_070": "18/30"},
+    "macura_minus_ordinary": -0.009,
+    "note": "parity, not improvement; returns floor-bound, no payoff claim",
+    "source": "research/RESULTS-MACURA-DMC-30SEED-2026-09-10.md"
+  },
+  "delayed_bimodal_n10": {
+    "ordinary": 0.934,
+    "identified_eq_norm": 0.948,
+    "identified_ema": 0.114,
+    "note": "rank-only after G7/G9; w-scale is not claimed",
+    "source": "research/RESULTS-NORMALIZATION-READJUDICATION-2026-09-07.md"
+  }
+}
