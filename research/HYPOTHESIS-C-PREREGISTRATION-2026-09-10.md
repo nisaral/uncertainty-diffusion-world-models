@@ -336,3 +336,52 @@ the run.)*
   whether it is *real and complexity-scaled*.
 - No DelayedBimodal or DMC transfer bar is re-opened by this document.
 - Nothing here changes the 2026-09-08 DMC verdict.
+
+---
+
+## Addendum 1 - sign-convention verification (2026-09-10, before the DMC run)
+
+The wiring smoke showed `identified_eq`'s cosine *rising* across its two
+600-step checkpoints (+0.059 -> +0.171), i.e. moving toward **alignment**, not
+conflict. Because Hypothesis A's placebo had already produced a sign result that
+took real analysis to understand, the metric's direction convention was verified
+*before* the GPU window rather than discovered after it.
+
+Artifact: `tests/test_gradient_interference_metric.py` (8 tests, all passing).
+The sign flip now lives in exactly one function (`interference_from_terms`), so
+the convention has a single test seam, pinned against **constructed** gradients
+whose cosine is known exactly by construction - the same ground-truth discipline
+used for the identifiability estimator:
+
+| constructed case | cos | interference | meaning |
+|---|---|---|---|
+| opposed gradients | -1 | **+1** | conflict |
+| aligned gradients | +1 | **-1** | alignment |
+| orthogonal gradients | 0 | 0 | independent |
+
+Plus, on the production path (`DistilledWorldModel.train_loss` + `GRAD_PROBE` +
+`interference_from_parts`):
+
+- the recorded cosine reproduces an independently recomputed cosine from the
+  same live `parts` to 1e-6, and `interference == -cos` exactly;
+- `ordinary` returns *not applicable* (None), never a zero;
+- the adjudicator's E1 contrast is `dmc_minus_db` **even when the `--data` flags
+  are passed in the reverse order**, and E2 is positive when interference and
+  deficit co-vary.
+
+**Reading of the smoke sign.** It is not a bug, and it is structurally unable to
+invalidate E1: E1 is a *cross-environment difference of the same quantity*, so a
+global sign-convention error would move both environments together and cancel in
+the contrast. What a sign bug *could* do is invert the **interpretation** (naming
+early alignment "interference"); that is now precluded by the constructed-gradient
+tests.
+
+Mechanistically, early alignment on DelayedBimodal is expected rather than
+suspicious: at 600 steps both terms are still dominated by the shared pull toward
+the teacher's data fit, and the registered read already drops the first 20% of
+checkpoints as warmup. Note also that `identified_eq`'s uncertainty terms
+(`epistemic_w`, `aleatoric_g`) are debiased *latent-statistic* terms computed from
+the same `x0` the `member` term fits, whereas the `hybrid` placebo's
+`value_variance` is a value-map-derived object - so eq aligning while hybrid
+mildly conflicts early is not contradictory, and the two are not the same
+measurement.

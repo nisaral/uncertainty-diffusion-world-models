@@ -136,6 +136,61 @@ def flat_student_grad(student, tensor) -> torch.Tensor:
     return torch.cat(chunks)
 
 
+def interference_from_terms(student, point_term, unc_term):
+    """Signed-interference convention, in one place so it can be tested.
+
+    Returns ``(cos, interference, ||g_point||, ||g_unc||)`` with the registered
+    convention
+
+        cos          = <g_point, g_unc> / (||g_point|| ||g_unc||)
+        interference = -cos        (positive => conflict, negative => alignment)
+
+    Liu et al. (PMLR 2023) measure task interference by the gradient conflict on
+    shared parameters; a negative cosine is the conflicting case.  The sign flip
+    is applied here and nowhere else, so the convention has a single test seam.
+    """
+    g_point = flat_student_grad(student, point_term)
+    g_unc = flat_student_grad(student, unc_term)
+    student.zero_grad(set_to_none=True)
+    denom = (g_point.norm() * g_unc.norm()).clamp_min(1e-12)
+    cos = float((g_point @ g_unc) / denom)
+    return cos, -cos, float(g_point.norm()), float(g_unc.norm())
+
+
+def interference_from_parts(student, parts, mcfg):
+    """Per-batch interference record from a live loss ``parts`` dict.
+
+    ``None`` when the arm has no active uncertainty term (e.g. ``ordinary``,
+    whose decision weights are all zero) - that is "not applicable", and must
+    never be recorded as a zero.
+    """
+    point = parts.get("member")
+    unc_terms = [k for k in parts
+                 if TERM_GROUP.get(k) == "uncertainty" and term_weight(mcfg, k) != 0.0]
+    if point is None or not unc_terms:
+        student.zero_grad(set_to_none=True)
+        return None
+    unc = None
+    for k in unc_terms:
+        t = term_weight(mcfg, k) * parts[k]
+        unc = t if unc is None else unc + t
+    cos, interference, pn, un = interference_from_terms(student, point, unc)
+    term_values = {}
+    for k, v in parts.items():
+        try:
+            term_values[k] = float(v.detach().mean())
+        except Exception:
+            pass
+    return {
+        "cos": cos,
+        "interference": interference,
+        "grad_norm_point": pn,
+        "grad_norm_unc": un,
+        "unc_terms": sorted(unc_terms),
+        "term_values": term_values,
+    }
+
+
 class GradientInterferenceProbeTrainer(MBPOTrainer):
     """MBPOTrainer + a measurement-only gradient-interference hook.
 
@@ -187,30 +242,15 @@ class GradientInterferenceProbeTrainer(MBPOTrainer):
             if parts is None:
                 student.zero_grad(set_to_none=True)
                 break
-            point = parts.get("member")
-            unc_terms = [k for k, v in parts.items()
-                         if TERM_GROUP.get(k) == "uncertainty" and term_weight(mcfg, k) != 0.0]
-            if point is None or not unc_terms:
-                student.zero_grad(set_to_none=True)
+            rec = interference_from_parts(student, parts, mcfg)
+            if rec is None:
                 break
             applicable = True
-            unc = None
-            for k in unc_terms:
-                t = term_weight(mcfg, k) * parts[k]
-                unc = t if unc is None else unc + t
-            g_point = flat_student_grad(student, point)
-            g_unc = flat_student_grad(student, unc)
-            student.zero_grad(set_to_none=True)
-            denom = (g_point.norm() * g_unc.norm()).clamp_min(1e-12)
-            cos = float((g_point @ g_unc) / denom)
-            cos_list.append(cos)
-            pn_list.append(float(g_point.norm()))
-            un_list.append(float(g_unc.norm()))
-            for k, v in parts.items():
-                try:
-                    term_values[k] = float(v.detach().mean())
-                except Exception:
-                    pass
+            cos_list.append(rec["cos"])
+            pn_list.append(rec["grad_norm_point"])
+            un_list.append(rec["grad_norm_unc"])
+            unc_terms = rec["unc_terms"]
+            term_values.update(rec["term_values"])
         if not applicable:
             return {"applicable": False, "reason": "no uncertainty term active",
                     "arm": self.arm}
