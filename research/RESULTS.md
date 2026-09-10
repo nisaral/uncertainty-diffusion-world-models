@@ -341,3 +341,31 @@ rather than negative.
 No DMC/DB verdict, bar, or win/N count changes; both items are re-readings of
 already-adjudicated rows.
 
+## Addendum 2026-09-10 (d): MACURA field baseline adjudicated at n=30 - parity, not improvement
+
+The MACURA DMC head-to-head completed on the company VM (17:54 -> 23:15 IST,
+90/90 rows = 30 seeds x {ordinary, identified_eq, macura_gate}, 30/30 seeds
+`exact_teacher_match: true` gap 0.0, exit rc=0). Full read:
+[RESULTS-MACURA-DMC-30SEED-2026-09-10.md](RESULTS-MACURA-DMC-30SEED-2026-09-10.md).
+
+- **Parity with plain self-gating.** `macura_gate - ordinary` u_rank **-0.009**
+  ([-0.017, -0.001], 9/30, d_z -0.38). The paired CI excludes 0, but the
+  magnitude is *below the n=30 MDE of 0.012* and both arms sit at the ceiling
+  (0.953 vs 0.961, both 30/30 >= 0.70). The field baseline does not improve on
+  the plain self-gated arm.
+- **Well above the identified arm.** `macura_gate - identified_eq` **+0.246**
+  ([+0.209, +0.285], **30/30**, d_z +2.27), reproducing the n=4 partial's
+  ordering.
+- **Independent replication of the DMC verdict.** This is a second 30-seed run
+  on a disjoint arm set, and `identified_eq - ordinary` = **-0.255** (0/30)
+  vs **-0.246** in the 09-08 file - the identified arm's practical-ordering
+  failure on hopper-hop is not a single-run artifact.
+- **The gate is active** (mean over 30 seeds): `macura_gate` stops 0.154 of
+  imagined rollouts vs ordinary's 0.110, keeps them at mean weight 0.850 vs
+  0.607, and its disagreement scale is ~70x smaller (`sqrt(u_KL)` 0.0051 vs
+  0.367). More aggressive stopping did not buy fidelity.
+- **Payoff endpoint still unreadable.** All return contrasts include 0
+  (`macura_gate - ordinary` +0.070 [-0.040, +0.213], 13/30) and per-arm medians
+  sit at the hopper floor; the DMC floor rule applies and the return thread
+  stays deferred. No MACURA payoff claim is made.
+

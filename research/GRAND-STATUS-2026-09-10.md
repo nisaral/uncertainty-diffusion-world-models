@@ -37,7 +37,20 @@ Integrity: all files parse; every present row reports exact teacher pairing
 adjudicative - the MACURA n=4 and Walker n=2 reads are PARTIAL/DIAGNOSTIC by
 definition and no registered bar is evaluated on them.
 
-## 2. MACURA field baseline on DMC/hopper-hop (PARTIAL, n=4 of 30)
+## 2. MACURA field baseline on DMC/hopper-hop
+
+**Adjudicated at n=30 on 2026-09-10** - full read in
+`research/RESULTS-MACURA-DMC-30SEED-2026-09-10.md`.
+
+Headline: `macura_gate` at parity with ordinary (-0.009 u_rank,
+[-0.017, -0.001], 9/30, d_z -0.38, magnitude below the n=30 MDE 0.012)
+and far above `identified_eq` (+0.246, 30/30); the gate is active
+(stop_frac 0.154 vs 0.110, mean weight 0.850 vs 0.607); returns stay
+floor-bound, so the registered payoff endpoint is still unreadable at 15k.
+`identified_eq - ordinary` = -0.255 (0/30) independently replicates the
+2026-09-08 verdict on a disjoint arm set and a second run.
+
+### 2-original. The n=4 partial read (superseded, kept for provenance)
 
 Registration: `research/MACURA-BASELINE-PREREGISTRATION-2026-09-09.md`
 (MACURA = ensemble disagreement gating, Eq-4 `u_KL` implementation, reuse of
@@ -194,7 +207,7 @@ Checkpoint u-rank means (3k/6k/9k/12k/15k, n=2): ordinary 0.014 / 0.342 /
 | Sanity S1 (n=10) | DIAGNOSTIC | Probe ordering confirmed at n=10; EMA collapse reproduced; superseded by S2 for adjudication | RESULTS-DMC-SANITY-2026-09-07 |
 | 30-seed adjudication S2 + gate-off S3 | ADJUDICATED | Mechanism transfers (EMA collapse 0/30 >= 0.70; eq - EMA +0.788 30/30); practical ordering does not (eq bars fail; lagged_eq below eq -0.073 7/30; ordinary tops 0.957 30/30); gating return-neutral at 15k (rule ii) | RESULTS-DMC-30SEED-ADJUDICATION-2026-09-08 |
 | CRN-bias probe n=10 | DIAGNOSTIC readout | Hypothesis A not supported: E1 norm null below MDE, nonorm +0.661 wrong sign; placebo (lagged_hybrid) drift-sensitive; EMA collapse reproduces; no eq_crn, E4 unbuilt | RESULTS-CRN-BIAS-DMC-2026-09-09 |
-| MACURA head-to-head | PARTIAL (n=4 of 30) | macura_gate u-rank at parity with ordinary (-0.003), above identified_eq (+0.216, 4/4); returns floor-bound at 15k -> payoff question unreadable here; finish n=30 before any bar | GRAND-STATUS section 2 (this doc) |
+| MACURA head-to-head | **ADJUDICATED (n=30)** | macura_gate at **parity** with ordinary (`-0.009 [-0.017,-0.001]`, 9/30, d_z -0.38, below the n=30 MDE 0.012) and far above identified_eq (`+0.246`, **30/30**, d_z +2.27); gate active (stop_frac 0.154 vs 0.110, mean weight 0.850 vs 0.607); returns floor-bound -> payoff endpoint unreadable at 15k. `identified_eq - ordinary` -0.255 (0/30) **independently replicates** the 09-08 verdict | RESULTS-MACURA-DMC-30SEED-2026-09-10 |
 
 ### 4c. Cross-cutting items
 
@@ -221,6 +234,7 @@ SAFE (adjudicated, cross-environment where claimed):
   general (EMA collapse reproduces; equal weights avoid it), but on a
   drifting-map benchmark at 15 episodes the plain self-gated ordinary arm is
   the top u-rank arm and the DB practical ordering does not transfer.
+- The MACURA field-baseline read on hopper (n=30): the `u_KL` gate matches but does not improve on plain self-gating, sits well above the identified arm, and leaves the DMC distillation ordering unchanged.
 - Normalization (value standardization), not lagging, is the measured driver
   of the DB live-critic gain (G9); w-scale language is rank-only.
 
@@ -229,19 +243,18 @@ NOT YET SAFE (do not put in the manuscript as results):
   asymmetry (Hypothesis A not supported at n=10; the lag asymmetry currently
   reads as an unresolved, benchmark-specific pattern with a normalization-knob
   alternative).
-- Any MACURA baseline claim (n=4 partial; payoff endpoints floor-bound at
-  15k on hopper; needs n=30 and/or a readable-return setting).
+- Any MACURA **payoff** claim: the n=30 gate/fidelity read is adjudicated, but every
+  return contrast on hopper at 15k has a CI including 0 with per-arm medians at the
+  floor, so the payoff endpoint still needs a readable-return setting.
 - Any Walker2d arm claim (staging only; 15k insufficient; identified_eq
   unfinished).
 
 ## 6. Exact next queue (priority order)
 
-1. MACURA - finish the DMC 30-seed head-to-head (Kaggle, resume-safe:
-   seeds 0-3 cached; eq + macura_gate needed on seeds 4-5, all three arms on
-   6-29; est. ~9-12 h on 2xT4 at the observed ~23 min/seed wall). Then run
-   the registered MACURA contrasts (return + rollout-gating quality) and the
-   DMC-payoff summarizer with `--no-bars` (registered bars do not apply to
-   this arm set).
+1. ~~MACURA - finish the DMC 30-seed head-to-head~~ - **DONE 2026-09-10**
+   (company VM, 17:54 -> 23:15 IST; 90/90 rows, 30/30 exact teacher pairing,
+   exit rc=0). Registered contrasts run; gate read, return read and the
+   independent replication are in `RESULTS-MACURA-DMC-30SEED-2026-09-10`.
 2. Walker2d - finish the budget probe arm set (identified_eq on seeds 0-1),
    then make the staged budget decision. Pilot evidence says 15k is not the
    operating point: plan a higher-budget sanity (e.g. 30k) before any arm
