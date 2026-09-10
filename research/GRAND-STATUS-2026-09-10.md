@@ -204,6 +204,8 @@ Checkpoint u-rank means (3k/6k/9k/12k/15k, n=2): ordinary 0.014 / 0.342 /
 | Effect sizes / power (5a) | PARTLY DONE | MDE/power tables landed in CRN Addendum A1.3 (pre-run); `effect_size_report.py` staged, not yet run on the adjudicated files |
 | Conditional 30k return extension (DMC) | DEFERRED / GATED | Hypothesis: lagged_eq - ordinary return +0.101 [+0.016, +0.199] (descriptive only); runs only if the payoff question is still worth its compute |
 | Hypothesis-A correction (eq_crn / E4) | NOT BUILT | Pre-committed gate: only after a confirmatory E1 at registered n |
+| Hypothesis C (gradient interference) | REGISTERED 2026-09-10, gates pre-answered | Gate 1 architecture: `member` and `epistemic_w`/`aleatoric_g` share the trunk - Jaccard(point, uncertainty)=1.00 on the real DelayedBimodal checkpoint and on the Hopper (15/4) topology, so C is coherent. Probe + adjudicator implemented and wiring-validated; no adjudicable row yet (DMC side needs a GPU window). `HYPOTHESIS-C-PREREGISTRATION-2026-09-10` |
+| Hypothesis D (M=2 variance vs dimensionality) | DESK CHECK: NOT SUGGESTIVE | The repo's balance-window prediction `sqrt(2/(N(M-1)))` is dimension-free (0.125 at N=128, M=2, identical on DelayedBimodal 5/1 and DMC 15/4), so it cannot produce an environment-specific gap (-0.104 DB vs -0.246 DMC). Not escalated to a run - pre-committed consequence |
 | Visualization V1-V4 + repo main page | DONE (2026-09-09) | Encodes the DMC 30-seed verdict + S1 curves; not yet refreshed with CRN/MACURA/Walker numbers (correct: those are diagnostic/partial) |
 | GitHub Pages | OPEN | Enable Pages at repo root on main so `visuals/v4-explorer.html` is live at the public URL |
 | Manuscript / paper narrative | DRAFT | `research/PAPER-NARRATIVE.md` assembled; open items above decide the CRN chapter and the MACURA/Walker additions |
@@ -253,6 +255,16 @@ NOT YET SAFE (do not put in the manuscript as results):
 5. Visuals / README / manuscript refresh only after items 1-2 adjudicate;
    do not put diagnostic or partial numbers in the committed visual payloads.
 6. Enable GitHub Pages at repo root on main (independent of the above).
+
+**New (2026-09-10b) - Hypothesis C, the third and final mechanism attempt.**
+Registered at `research/HYPOTHESIS-C-PREREGISTRATION-2026-09-10.md`. Both gates are
+already answered with artifacts (`udwm/scripts/check_distill_param_sharing.py`,
+`theory/hypothesis_d_dimension_desk_check.py`): the identified loss terms share the
+student trunk (E1/E2 are meaningful), and Hypothesis D's dimensional-constants channel
+is not suggested. The DMC side of the probe needs a GPU window and **must not displace
+items 1-2** - it is a mechanism read, not a payoff read. If C is refuted, the DMC
+transfer failure is written up as a characterized-but-unexplained open question; there
+is no fourth mechanism attempt.
 
 ## 7. Integrity and method notes for this read
 

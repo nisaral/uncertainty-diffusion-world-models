@@ -251,3 +251,59 @@ PARTIAL/DIAGNOSTIC only (no bars evaluated):
 - Unchanged and still open: CRN Hypothesis A not supported at n=10, no
   eq_crn/E4; compute-normalized re-analysis + effect-size report staged but
   not run; 30k return extension gated; GitHub Pages not yet enabled.
+
+## Addendum 2026-09-10 (b): Hypothesis C registered - gradient interference as the third mechanism attempt (both gates pre-answered)
+
+Third and final mechanism attempt at the DMC transfer failure:
+[HYPOTHESIS-C-PREREGISTRATION-2026-09-10.md](HYPOTHESIS-C-PREREGISTRATION-2026-09-10.md).
+Two gates were answered *before* registration, each with a runnable artifact.
+No verdict moved and no bar was re-opened.
+
+- **Gate 1 (architecture coherence): SHARED TRUNK - C is coherent.**
+  `udwm/scripts/check_distill_param_sharing.py` rebuilds the exact model from a
+  saved checkpoint's `cfg`, backwards each identified-loss term separately, and
+  intersects the parameter sets that receive nonzero gradient. On the real
+  DelayedBimodal checkpoint (`checkpoints/hf_diagnostic_delayedbimodal/identified_eq_seed0.pt`):
+  `member` (point prediction) and `epistemic_w`/`aleatoric_g` (uncertainty
+  matching) all reach the same 50 student tensors; `Jaccard(point, uncertainty)
+  = 1.00`; clean load (no missing/unexpected keys). Confirmed for the Hopper
+  arm topology (15/4) on `identified_eq`, `lagged_identified_eq` and
+  `identified_hybrid`. There is **no separate point-prediction head** - one
+  `ConditionalDenoiser` per member, every term a functional of the same
+  `forward_member` output. `ordinary` has no uncertainty term by construction
+  (all decision weights zero), so it is not applicable, not measured.
+- **Gate 2 (Hypothesis D desk check): NOT SUGGESTIVE - not escalated.**
+  `theory/hypothesis_d_dimension_desk_check.py` shows the repo's own
+  balance-window prediction `std(g_hat)/g* ~ sqrt(2/(N(M-1)))` is
+  **dimension-free** at fixed (N, M): 0.125 at the registered operating point
+  (N=128, M=2), identically on DelayedBimodal (5/1) and DMC (15/4). A
+  dimension-independent noise term cannot produce an environment-specific gap
+  (observed `eq - ordinary` u-rank -0.104 DB vs -0.246 DMC). The only surviving
+  channel is non-Gaussian/heavy-tailed constants, which the formula does not
+  model and the repo's theory does not predict.
+
+Registered endpoints: **E1** environment contrast (`identified_eq` interference,
+DMC - DB > 0), **E2** within-environment dose-response (interference vs the
+per-seed `ordinary - eq` u-rank gap), **E3** capacity axis (student hidden
+width - the previously shelved G8 knob; explicitly secondary/lower-confidence),
+with `hybrid` placebos for E1/E2 and a pre-stated falsification condition.
+
+Instrumentation is measurement-only: `udwm/scripts/probe_gradient_interference.py`
+adds one forward/backward per probe checkpoint and never steps an optimizer
+(`GRAD_PROBE` mirrors the existing `CRN_PROBE` flag, so the training path is
+bit-identical when unset), plus
+`udwm/scripts/summarize_gradient_interference.py` (bootstrap CIs + wins/N).
+Wiring smoke (600-step DelayedBimodal, seed 0, artifact deleted rather than left
+in `runs/`): teacher pairing exact (`exact_teacher_match: true`, gap 0.0),
+`ordinary` correctly N/A, `identified_eq` cos +0.059 -> +0.171 and `hybrid` cos
+-0.167 -> -0.061 over two checkpoints. **Smoke is not a result** - one seed, 600
+steps, far below the registered 15k operating point, and the eq sign is opposite
+the E1 prediction, which is precisely why it must not be read as one.
+
+MDE registered before the run (item 5a): E1 two-sample MDE = 3.962 sigma/sqrt(n)
+(1.25 sigma at n=10, 0.72 at n=30); E2 Fisher-z |r| MDE 0.79 at n=10, 0.49 at
+n=30 - so an n=10 E2 null sits below the MDE and is not evidence of absence
+(the underpowered-n trap the CRN-bias E1 read fell into after the fact).
+
+DMC side needs a GPU window and must not displace the MACURA n=30 completion or
+the Walker2d budget decision.

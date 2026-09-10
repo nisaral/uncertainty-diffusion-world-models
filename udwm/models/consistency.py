@@ -93,6 +93,12 @@ class ConsistencyStudent(nn.Module):
 # untouched when this stays None).
 CRN_PROBE = None
 
+# Optional per-forward gradient-interference probe context (Hypothesis C),
+# set by udwm/scripts/probe_gradient_interference.py.  Measurement only: when
+# this stays None the training path is bit-identical, and the probe never
+# backprops through it.
+GRAD_PROBE = None
+
 
 def _crn_record(t_value, s_value, m, b):
     """Record the paired teacher/student value evaluations of one forward.
@@ -895,6 +901,8 @@ class DistilledWorldModel(nn.Module):
         else:
             parts = None
             s_loss = distill_loss(self.student, self.teacher, obs, actions, next_obs, rewards)
+        if GRAD_PROBE is not None and parts is not None:
+            GRAD_PROBE['parts'] = parts
         total = t_loss + s_loss
         out = {
             "total": total,
