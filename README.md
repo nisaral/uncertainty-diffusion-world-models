@@ -306,6 +306,10 @@ already exist (MACURA and earlier). This repo does not claim to invent them.
 
 ---
 
+## Contributing / Help wanted
+
+Contributions are welcome, including small ones. Useful contributions: running the CPU smoke test on your machine and reporting problems, new toy environments, and independent re-runs of the committed tables (see REPRODUCE.md). Look for [good first issue](https://github.com/nisaral/uncertainty-diffusion-world-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) and [help wanted](https://github.com/nisaral/uncertainty-diffusion-world-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) issues, read [CONTRIBUTING.md](CONTRIBUTING.md), and open an issue if you want to discuss an idea first.
+
 ## Lineage
 
 MBPO · PETS · Luis exact UBE · DIAMOND · consistency / progressive
