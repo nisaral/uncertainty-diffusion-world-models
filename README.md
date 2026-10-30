@@ -18,6 +18,17 @@ model, **not** conformal coverage, and **not** a SOTA control claim.
 
 **Repo:** https://github.com/nisaral/uncertainty-diffusion-world-models
 
+[![CI](https://github.com/nisaral/uncertainty-diffusion-world-models/actions/workflows/ci.yml/badge.svg)](https://github.com/nisaral/uncertainty-diffusion-world-models/actions/workflows/ci.yml)
+
+**In plain terms:** when you distil a slow diffusion world model into a fast one-step
+student, a common trick is to make the student reproduce the teacher's uncertainty
+number. This repo shows (with a toy proof and small-scale experiments) that matching that
+single number does not force the student to keep the *right kind* of uncertainty, and
+measures when that helps or hurts. The smoke test and unit tests run on CPU in seconds;
+published results are on DelayedBimodal and small continuous-control toys, not MuJoCo/DMC tables.
+
+**Quick start:** `pip install -r requirements.txt && python -m udwm.scripts.smoke_test && python -m pytest tests -q`
+
 ## Visual tour (start here)
 
 - **Distill lab (toy, not a SOTA agent)** — four losses on one `(w, g)` field,
@@ -244,7 +255,7 @@ Published rows are CPU-verified (checksum-exact). The runners accept `--device c
 pip install -r requirements.txt
 
 python -m udwm.scripts.smoke_test
-python -m pytest tests/test_core.py tests/test_ground_truth_w_g.py -q
+python -m pytest tests -q            # full suite, ~10 s on CPU (also run in CI)
 python theory/toy_ube_mdp.py
 python theory/distill_identifiability.py
 python theory/identifiability_frontier.py
